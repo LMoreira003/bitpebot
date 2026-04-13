@@ -92,32 +92,43 @@ class WhatsAppBot {
             console.log(`======================================================`);
 
             try {
+            try {
                 // 2. O SYSTEM PROMPT VERDADEIRO (A LÓGICA DO ARQUITETO)
                 const systemPrompt = `Você é o Bot Interno da BitPé calçados, operando no grupo de funcionários. O dono é o ADM / Programador do sistema.
-Seu objetivo é ler os pedidos dos funcionários e processar leads ou vendas concluídas.
+Seu objetivo é ler as solicitações dos funcionários para gerenciar clientes. Você agora recebe o "Contexto Recente" da conversa para lembrar do que estavam falando.
 
-REGRAS ESTABELECIDAS PELO PROGRAMADOR:
-1. VENDA CONCLUÍDA: Se um funcionário avisar que alguém COMPROU (ex: "bot cliente 62999... comprou tenis nike 41"), a ação é "salvar_compra" (Salva e o sistema enviará msg automática de agradecimento ao cliente).
-2. FALTA DE ESTOQUE (LEAD): Se um funcionário pedir para salvar pois o cliente procurou algo mas NÃO TINHA (ex: "salva bot 6299.. n tinha bota 39"), a ação é "salvar_lead" (O sistema apenas salva silencioamente, sem mensagem pro cliente).
-3. APAGAR: Se o funcionário pedir para APAGAR, EXCLUIR, ou DELETAR um número, a ação é "apagar_lead".
-4. ESTATÍSTICA: Se alguem perguntar "Quantos numeros tem salvos/no banco?", você dirá que vai checar e devolverá a ação "contar_leads". O Node.js fará o painel.
-5. SEM CONTEXTO: Se um funcionário jogar apenas um número isolado solto na roda, responda perguntando "Qual o motivo do número? Cliente comprou ou faltou estoque?". Ação é "perguntar_funcionario".
-6. LIXO: Se mandarem algo absurdo, use "bloco_de_notas" (anotando para o Programador auditar).
+REGRAS:
+1. VENDA: Se alguém falar que o cliente COMPROU (ex: "cliente Lucas 629.. comprou babuche n41"), extraia TUDO! Ação: "salvar_compra".
+2. FALTA/LEAD: Se pedirem pra salvar pq NÃO TINHA O PRODUTO, a ação é "salvar_lead".
+3. APAGAR: Para EXCLUIR um número, ação "apagar_lead".
+4. ESTATÍSTICA: Se alguem perguntar "Quantos numeros tem salvos?", responda APENAS que vai verificar. Ação "contar_leads".
+5. SEM CONTEXTO: Se o funcionário jogar apenas um número, pergunte sobre o que é. Ação "perguntar_funcionario".
+6. LIXO: Mensagens indecifráveis geram ação "bloco_de_notas".
 
+OBSERVAÇÃO DA RESPOSTA: Você deve ser natural e cirúrgico. Sepeare as informações para salvar.
 Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em volta:
 {
   "acao": "salvar_compra" ou "salvar_lead" ou "apagar_lead" ou "contar_leads" ou "perguntar_funcionario" ou "bloco_de_notas" ou "nenhuma_acao",
-  "mensagem_para_grupo": "Sua resposta com emojis comunicando pro grupo a decisão que vc tomou.",
+  "mensagem_para_grupo": "Sua resposta com emojis comunicando pro grupo a decisão.",
   "detalhes": {
-    "telefone_extraido": "6299999999 se houver (somente os numeros)",
-    "observacao_ou_produto": "produto em falta ou produto comprado",
-    "anotacao_stranha": "se usou o bloco de notas, digite a bizarrice aqui"
+    "telefone_extraido": "6299999999 se houver",
+    "nome_cliente": "Nome do cliente se foi falado na frase (ex: Lucas)",
+    "produto": "Apenas o nome do calçado (ex: Babuche Homem Aranha)",
+    "numeracao": "Apenas o número do calçado (ex: 41)",
+    "anotacao_stranha": "bizarrice para o bloco de notas"
   }
 }`;
 
-                console.log(`[TESTE V2] 🚀 Enviando a mensagem para a IA Especialista...`);
-                // Chama o cerebro da AI
-                let resposta_ia = await cerebro.pensar(msg.body, systemPrompt);
+                // Adicionando Memória de Curto Prazo (últimas 6 mensagens do grupo)
+                if (!this.memoriaConversa) this.memoriaConversa = [];
+                this.memoriaConversa.push(msg.body);
+                if (this.memoriaConversa.length > 7) this.memoriaConversa.shift();
+
+                const contextoMemoria = this.memoriaConversa.map((txt, i) => `Msg ${i+1}: ${txt}`).join('\n');
+                const promptFinal = `[CONTEXTO RECENTE DO GRUPO PARA VC LEMBRAR]\n${contextoMemoria}\n\n[MENSAGEM ATUAL PARA ANALISAR]\n"${msg.body}"`;
+
+                console.log(`[TESTE V2] 🚀 Enviando a mensagem com Histórico para a IA Especialista...`);
+                let resposta_ia = await cerebro.pensar(promptFinal, systemPrompt);
 
                 console.log(`\n[V2] 🧠 RETORNO IA (Ação Decidida):`);
                 console.log(resposta_ia);
@@ -126,78 +137,75 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                 try {
                     const IA_Decisao = JSON.parse(resposta_ia);
                     
-                    // ==========================================
-                    // ⚙️ O MOTOR DE CONEXÃO FÍSICA (SQLite)
-                    // ==========================================
-                    // Função genérica de limpar o número e botar BR
                     const limparNumeroBR = (bruto) => {
                         let n = bruto.replace(/\D/g, '');
                         if (!n.startsWith('55') && n.length >= 10) n = '55' + n;
                         return n;
                     };
 
+                    let infoMsgParaEnviarDepois = null;
+
                     if (IA_Decisao.acao === 'salvar_compra' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
                         const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
-                        const obs = IA_Decisao.detalhes.observacao_ou_produto || "Não especificado";
+                        const nomeInfo = IA_Decisao.detalhes.nome_cliente || "";
+                        const prodInfo = IA_Decisao.detalhes.produto || "seu calçado";
+                        const numInfo = IA_Decisao.detalhes.numeracao || "";
+                        
                         const data = new Date().toLocaleDateString('pt-BR');
                         const hora = new Date().toLocaleTimeString('pt-BR');
                         
-                        // Salva na Tabela de VENDAS REAIS DE FATO (Cria um historico)
-                        execute("INSERT INTO compras (telefone, produto, data_compra, hora_compra) VALUES (?, ?, ?, ?)", [numLimpo, obs, data, hora]);
-                        console.log(`[MOTOR] ✅ Compra Física Concluída e inserida: ${numLimpo} (${obs})`);
+                        // Salva com todas as gavetas preenchidas perfeitamente
+                        execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
                         
-                        // DISPARO AUTOMÁTICO DE AGRADCIMENTO DE COMPRAS!
+                        // PV limpo e agradável
                         const targetId = numLimpo + '@c.us';
-                        const wppAgradece = `Oi! 👋 Aqui é a equipe *BitPé Calçados*! 🦶✨\n\nMuito obrigado pela sua compra de ${obs}! 💜 Ficamos imensamente felizes pela sua preferência.\n\n🎁 *QUER 10% DE DESCONTO na próxima compra?*\nÉ só postar uma foto marcando a gente lá no nosso Instagram: https://instagram.com/bitpecalcados\n\nAbraços!`;
+                        const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe *BitPé Calçados*! 🦶✨\n\nMuito obrigado pela sua compra de um maravilhoso ${prodInfo}! 💜 Ficamos imensamente felizes pela sua preferência.\n\n🎁 *QUER 10% DE DESCONTO na próxima compra?*\nÉ só postar uma foto marcando a gente lá no nosso Instagram: https://instagram.com/bitpecalcados\n\nAbraços!`;
                         try {
                             await this.client.sendMessage(targetId, wppAgradece);
-                            console.log(`[MOTOR] 📨 Mensagem de AGRADECIMENTO envida para ${targetId}!`);
                         } catch (e) {
-                            console.error(`[MOTOR] ❌ Falha ao tentar mandar msg de agradecimento:`, e.message);
+                            console.error(`[MOTOR] ❌ PV falhou:`, e.message);
                         }
-
                     }
                     else if (IA_Decisao.acao === 'salvar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
                         const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
-                        const obs = IA_Decisao.detalhes.observacao_ou_produto || "";
-                        
-                        // Apenas salva silencioamente na tabela de LEADs quentes por Falta de Estoque
+                        const prodInfo = IA_Decisao.detalhes.produto || "";
                         const existe = queryOne("SELECT id FROM leads WHERE telefone = ?", [numLimpo]);
                         if (!existe) {
-                            execute("INSERT INTO leads (telefone, observacao_ou_produto) VALUES (?, ?)", [numLimpo, obs]);
-                            console.log(`[MOTOR] 🕵️‍♂️ Lead Inserido Furtivamente (Sem disparo de PV): ${numLimpo}`);
-                        } else {
-                            console.log(`[MOTOR] Lead ${numLimpo} já existia no radar frio.`);
+                            execute("INSERT INTO leads (telefone, observacao_ou_produto) VALUES (?, ?)", [numLimpo, prodInfo]);
                         }
                     } 
                     else if (IA_Decisao.acao === 'apagar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
                         const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
                         execute("DELETE FROM leads WHERE telefone = ?", [numLimpo]);
-                        console.log(`[MOTOR] 🗑️ Varreram o numero ${numLimpo} dos leads perdidos.`);
                     }
                     else if (IA_Decisao.acao === 'bloco_de_notas' && IA_Decisao.detalhes && IA_Decisao.detalhes.anotacao_stranha) {
                         execute("INSERT INTO bloco_notas (anotacao) VALUES (?)", [IA_Decisao.detalhes.anotacao_stranha]);
-                        console.log(`[MOTOR] 📝 Uma anotação obscura foi repassada para os Programadores auditarem.`);
                     }
                     else if (IA_Decisao.acao === 'contar_leads') {
                         const countLeads = queryOne("SELECT COUNT(*) as total FROM leads");
                         const countCompras = queryOne("SELECT COUNT(*) as total FROM compras");
-                        const infoMsg = `\n\n📊 *DADOS BITPÉ:*\n- Clientes Atendidos/Compras: ${countCompras ? countCompras.total : 0}\n- Leads em radar (Falta estoque): ${countLeads ? countLeads.total : 0}`;
-                        // Acopla os dados fisicos reais na fala da IA.
-                        IA_Decisao.mensagem_para_grupo += infoMsg;
+                        
+                        // Em vez de mesclar na fala dela, nós engatilhamos para ser disparado numa segunda bolha!
+                        infoMsgParaEnviarDepois = `📊 *MÉTRICAS BITPÉ CHECADAS:*\n\n✅ Vendas Concluídas hoje: ${countCompras ? countCompras.total : 0}\n⚠️ Leads de Falta de Estoque: ${countLeads ? countLeads.total : 0}\n\nPainel físico da Amazon 100% online.`;
                     }
 
-                    // Por fim, imprime no grupo as palavras fofas da nossa heroína
+                    // 1. O Bot envia a resposta natural no grupo primeiro
                     if (IA_Decisao.mensagem_para_grupo) {
                         await msg.reply(IA_Decisao.mensagem_para_grupo);
+                        this.memoriaConversa.push(IA_Decisao.mensagem_para_grupo); // Grava o que ele disse tbm!
                     } else {
-                        await msg.reply(resposta_ia);
+                        await msg.reply('Entendido.');
                     }
-                } catch (e) {
-                    await msg.reply(resposta_ia); // Dispara os cacos brutos caso ela alucine fora do JSON
-                }
+                    
+                    // 2. Se a Ordem for de contar leads, o Node.js envia os dados Puros logo em seguida (Efeito Delay Humano)
+                    if (infoMsgParaEnviarDepois) {
+                        await new Promise(resolve => setTimeout(resolve, 2500)); // Aguarda 2.5s pra parecer real
+                        await this.client.sendMessage(msg.from, infoMsgParaEnviarDepois);
+                    }
 
-                console.log(`[TESTE V2] ✅ O Motor encerrou seu clico com sucesso.`);
+                } catch (e) {
+                    await msg.reply('Ops, tive um pequeno solavanco interno aqui!');
+                }
             } catch (erro) {
                 console.error("[WHATSAPP] O Cérebro deu tela azul:", erro);
             }

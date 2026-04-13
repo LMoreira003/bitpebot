@@ -22,6 +22,32 @@ app.get('/api/status', (req, res) => {
     res.json(bot.getStatus());
 });
 
+// ================================================
+// TELA VISUAL PARA LER O QR CODE RÁPIDO:
+// ================================================
+app.get('/qr', (req, res) => {
+    const infos = bot.getStatus();
+    if (infos.status === 'aguardando_qr' && infos.qrCode) {
+        res.send(`
+            <html lang="pt-br">
+            <body style="display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; background-color:#121212; color:white; font-family:sans-serif; margin:0;">
+                <h2>📱 Leia o QR Code Rapidamente!</h2>
+                <img src="${infos.qrCode}" style="border-radius:10px; width:300px; height:300px; border:4px solid #00a884; padding:10px; background:white;"/>
+                <p>Tempo esgota rápido. Se falhar, dê F5 (Atualizar) na página.</p>
+                <script>
+                    // A página atualizará sozinha a cada 15 segundos pra você não perder o QR fresquinho!
+                    setTimeout(() => window.location.reload(), 15000);
+                </script>
+            </body>
+            </html>
+        `);
+    } else if (infos.status === 'conectado') {
+        res.send("<body style='background:#121212; color:#00a884; display:flex; justify-content:center; align-items:center; height:100vh;'><h1>✅ WhatsApp Conectado e Vivo!</h1></body>");
+    } else {
+        res.send("<body style='background:#121212; color:white; display:flex; justify-content:center; align-items:center; height:100vh;'><h2>O Bot está aquecendo... Aguarde 10 segundos e dê F5.</h2></body>");
+    }
+});
+
 // Reconectar WhatsApp
 app.post('/api/reconectar', async (req, res) => {
     try {

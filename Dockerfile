@@ -13,6 +13,10 @@ RUN npm install
 
 COPY . .
 
+# Dá a posse de todos os arquivos do bot para o usuário do Puppeteer.
+# Isso permite que ele possa criar a pasta /session do Zap e editar o botbitpe.db
+RUN chown -R pptruser:pptruser /usr/src/app
+
 EXPOSE 3333
 
 # Retorna para o usuário original exigido pela imagem do Google Puppeteer

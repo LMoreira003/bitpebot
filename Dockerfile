@@ -1,10 +1,17 @@
-FROM ghcr.io/puppeteer/puppeteer:latest
+FROM node:20-slim
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
-
-# Altera temporariamente para modo administrador para ele não dar erro de permissão (EACCES)
+# Altera para root garantido para poder instalar coisas no linux
 USER root
+
+# Instala o Chromium nativo do Linux "na unha" (não tem como o caminho dele sumir depois)
+RUN apt-get update && apt-get install -y \
+    chromium \
+    fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
+    --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
+# Forçamos o código do Zap a olhar para o lugar exato onde acabamos de instalar o Chromium!
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /usr/src/app
 
@@ -13,13 +20,9 @@ RUN npm install
 
 COPY . .
 
-# Dá a posse de todos os arquivos do bot para o usuário do Puppeteer.
-# Isso permite que ele possa criar a pasta /session do Zap e editar o botbitpe.db
-RUN chown -R pptruser:pptruser /usr/src/app
+# Solução matadora para qualquer EACCES: dar permissão irrestrita pra pasta do bot
+RUN chmod -R 777 /usr/src/app
 
 EXPOSE 3333
-
-# Retorna para o usuário original exigido pela imagem do Google Puppeteer
-USER pptruser
 
 CMD [ "node", "server.js" ]

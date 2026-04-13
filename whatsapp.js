@@ -67,24 +67,47 @@ class WhatsAppBot {
         const cerebro = require('./cerebro');
 
         this.client.on('message', async (msg) => {
-            // Ignorar mensagens de sistema, grupos inúteis ou Status
+            // Ignorar mensagens de sistema ou enviadas pelo próprio bot solto
             if (msg.from === 'status@broadcast' || msg.fromMe) return;
 
-            console.log(`\n[WHATSAPP] 💬 Mensagem de ${msg.from}: ${msg.body}`);
+            // 1. O GATILHO:
+            // Só escuta se a mensagem tiver literalmente "@bot" escrita ou se o contato dele foi marcado pelo WhatsApp (@55999...)
+            const marcouArroubaBot = msg.body.toLowerCase().includes('@bot');
+            const marcouOCelular = msg.mentionedIds && this.client.info && msg.mentionedIds.includes(this.client.info.wid._serialized);
+            
+            if (!marcouArroubaBot && !marcouOCelular) {
+                return; // Ignora os papos furados do grupo e fica quieto.
+            }
+
+            console.log(`\n======================================================`);
+            console.log(`[TESTE] 🔔 GATILHO ACIONADO POR ${msg.from}!`);
+            console.log(`[TESTE] 📩 MENSAGEM LIDA: "${msg.body}"`);
+            console.log(`======================================================`);
 
             try {
-                // Prompt instrutivo de exemplo para o que ele deve fazer
-                const prompt_de_comandos = `
-Você é a inteligência artificial do grupo de WhatsApp, controlando o bot da BitPé.
-Você deve ler as mensagens e responder humanamente de forma rápida e sucinta.
-Se tentarem pedir para salvar número, você ajuda. Se for dúvida de sapato, ajude.
-Não seja um robô chato, digite como um brasileiro normal de WhatsApp usando gírias leves.`;
+                // 2. O SYSTEM PROMPT NOVO (FORÇANDO MODO JSON)
+                const systemPrompt = `Você é a inteligência artificial do grupo de WhatsApp, controlando o bot da BitPé.
+Seu objetivo é analisar o que o cliente disse e decidir se ele quer tirar uma dúvida, ou se é para anotar o número dele para futuras compras (falta de estoque).
 
-                // Chama a nossa rotação de chaves gratuitas do json!
-                const resposta_ia = await cerebro.pensar(msg.body, prompt_de_comandos);
+Você é obrigado a responder apenas no formato JSON abaixo, sem texto extra em volta:
+{
+  "mensagem_para_grupo": "sua resposta humanizada respondendo do grupo",
+  "acao": "nenhuma_acao" ou "salvar_lead" ou "pergunta"
+}`;
 
-                // Envia a resposta final para o chat (marcando a pessoa)
+                console.log(`[TESTE] 🚀 Enviando a mensagem crua para a IA na Airforce...`);
+                // Chama o cerebro da AI para pensar
+                let resposta_ia = await cerebro.pensar(msg.body, systemPrompt);
+
+                console.log(`\n[TESTE] 🧠 RETORNO BRUTO DA IA (Como o seu código vai ler ela):`);
+                console.log(resposta_ia);
+
+                // 3. RETORNO PARA O GRUPO
+                // Neste formato de TESTE inicial, a gente cospe o texto Json direto no zap ou tenta extrair
+                // Só pro cliente ver que bateu e voltou lá!
                 await msg.reply(resposta_ia);
+
+                console.log(`[TESTE] ✅ Mensagem enviada de volta para o cliente.`);
             } catch (erro) {
                 console.error("[WHATSAPP] O Cérebro deu tela azul:", erro);
             }

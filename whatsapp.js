@@ -70,13 +70,20 @@ class WhatsAppBot {
             // Ignorar mensagens de sistema ou enviadas pelo próprio bot solto
             if (msg.from === 'status@broadcast' || msg.fromMe) return;
 
-            // 1. O GATILHO:
-            // Só escuta se a mensagem tiver literalmente "@bot" escrita ou se o contato dele foi marcado pelo WhatsApp (@55999...)
-            const marcouArroubaBot = msg.body.toLowerCase().includes('@bot');
-            const marcouOCelular = msg.mentionedIds && this.client.info && msg.mentionedIds.includes(this.client.info.wid._serialized);
+            // 1. O GATILHO (Reforçado com colete Anti-Crash para lidar com midias isoladas e falhas nativas)
+            if (!msg.body) return; // Se for uma foto sem legenda ou recado vazio do sistema, o bot não quebra tentando ler.
+            
+            const textoLimpo = msg.body.toLowerCase();
+            const marcouArroubaBot = textoLimpo.includes('@bot');
+            
+            // Tratamento hiper-blindado pra checar se ele foi mencionado sem crashar se as variáveis de sessão não tiverem carregado =
+            let marcouOCelular = false;
+            if (msg.mentionedIds && this.client && this.client.info && this.client.info.wid) {
+                marcouOCelular = msg.mentionedIds.includes(this.client.info.wid._serialized);
+            }
             
             if (!marcouArroubaBot && !marcouOCelular) {
-                return; // Ignora os papos furados do grupo e fica quieto.
+                return; // Ignora os papos furados do grupo e fica quieto sem quebrar.
             }
 
             console.log(`\n======================================================`);
@@ -85,51 +92,112 @@ class WhatsAppBot {
             console.log(`======================================================`);
 
             try {
-                // 2. O SYSTEM PROMPT NOVO (MVP ASSISTENTE ADMINISTRATIVO STRANGE)
-                const systemPrompt = `Você é o Bot Assistente Interno da BitPé calçados, operando de forma séria e ágil em um grupo fechado de funcionários.
-Seu objetivo primário é ler as conversas dos funcionários e extrair leads de contatos.
+                // 2. O SYSTEM PROMPT VERDADEIRO (A LÓGICA DO ARQUITETO)
+                const systemPrompt = `Você é o Bot Interno da BitPé calçados, operando no grupo de funcionários. O dono é o ADM / Programador do sistema.
+Seu objetivo é ler os pedidos dos funcionários e processar leads ou vendas concluídas.
 
-REGRAS:
-1. Se um funcionário enviar um número solicitando salvamento e o motivo (ex: "salva esse num 62999... não tinha nike 42"), sua ação é salvar o lead.
-2. Se um funcionário jogar apenas um número "62...9" na roda ou informações muito quebradas, você fará uma pergunta devolta ao funcionário no grupo (Ex: "Qual foi o motivo desse lead galera? Falta de estoque? Tem nome?").
-3. Se mandarem algo absurdo ou incompreensível para o sistema de leads, invoque o "bloco_de_notas". Você avisa que não entendeu, mas que salvou a ocorrência no bloco de notas para o dono ver depois.
+REGRAS ESTABELECIDAS PELO PROGRAMADOR:
+1. VENDA CONCLUÍDA: Se um funcionário avisar que alguém COMPROU (ex: "bot cliente 62999... comprou tenis nike 41"), a ação é "salvar_compra" (Salva e o sistema enviará msg automática de agradecimento ao cliente).
+2. FALTA DE ESTOQUE (LEAD): Se um funcionário pedir para salvar pois o cliente procurou algo mas NÃO TINHA (ex: "salva bot 6299.. n tinha bota 39"), a ação é "salvar_lead" (O sistema apenas salva silencioamente, sem mensagem pro cliente).
+3. APAGAR: Se o funcionário pedir para APAGAR, EXCLUIR, ou DELETAR um número, a ação é "apagar_lead".
+4. ESTATÍSTICA: Se alguem perguntar "Quantos numeros tem salvos/no banco?", você dirá que vai checar e devolverá a ação "contar_leads". O Node.js fará o painel.
+5. SEM CONTEXTO: Se um funcionário jogar apenas um número isolado solto na roda, responda perguntando "Qual o motivo do número? Cliente comprou ou faltou estoque?". Ação é "perguntar_funcionario".
+6. LIXO: Se mandarem algo absurdo, use "bloco_de_notas" (anotando para o Programador auditar).
 
-Você é OBRIGADO a responder estritamente um JSON limpo, sem texto em volta:
+Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em volta:
 {
-  "acao": "salvar_lead" ou "perguntar_funcionario" ou "bloco_de_notas" ou "nenhuma_acao",
-  "mensagem_para_grupo": "Sua resposta humana com emojis comunicando claramente pro funcionário no grupo o que você fez ou decidiu.",
+  "acao": "salvar_compra" ou "salvar_lead" ou "apagar_lead" ou "contar_leads" ou "perguntar_funcionario" ou "bloco_de_notas" ou "nenhuma_acao",
+  "mensagem_para_grupo": "Sua resposta com emojis comunicando pro grupo a decisão que vc tomou.",
   "detalhes": {
-    "telefone_extraido": "629999999 se houver",
-    "observacao_ou_produto": "observações extraídas",
-    "anotacao_stranha": "se usou o bloco de notas, digite aqui a justificativa"
+    "telefone_extraido": "6299999999 se houver (somente os numeros)",
+    "observacao_ou_produto": "produto em falta ou produto comprado",
+    "anotacao_stranha": "se usou o bloco de notas, digite a bizarrice aqui"
   }
 }`;
 
-                console.log(`[TESTE V2] 🚀 Enviando a mensagem crua para a IA na Nuvem do Google...`);
-                // Chama o cerebro da AI para pensar
+                console.log(`[TESTE V2] 🚀 Enviando a mensagem para a IA Especialista...`);
+                // Chama o cerebro da AI
                 let resposta_ia = await cerebro.pensar(msg.body, systemPrompt);
 
-                console.log(`\n[TESTE V2] 🧠 RETORNO BRUTO DA IA (Como o seu código vai ler ela):`);
+                console.log(`\n[V2] 🧠 RETORNO IA (Ação Decidida):`);
                 console.log(resposta_ia);
 
-                // 3. RETORNO PARA O GRUPO
+                // 3. O MOTOR EXECUTOR QUE PROCESSA AS ORDENS DA IA
                 try {
-                    // Transforma o texto de volta em um Objeto que o Javascript entende
                     const IA_Decisao = JSON.parse(resposta_ia);
                     
+                    // ==========================================
+                    // ⚙️ O MOTOR DE CONEXÃO FÍSICA (SQLite)
+                    // ==========================================
+                    // Função genérica de limpar o número e botar BR
+                    const limparNumeroBR = (bruto) => {
+                        let n = bruto.replace(/\D/g, '');
+                        if (!n.startsWith('55') && n.length >= 10) n = '55' + n;
+                        return n;
+                    };
+
+                    if (IA_Decisao.acao === 'salvar_compra' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
+                        const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
+                        const obs = IA_Decisao.detalhes.observacao_ou_produto || "Não especificado";
+                        const data = new Date().toLocaleDateString('pt-BR');
+                        const hora = new Date().toLocaleTimeString('pt-BR');
+                        
+                        // Salva na Tabela de VENDAS REAIS DE FATO (Cria um historico)
+                        execute("INSERT INTO compras (telefone, produto, data_compra, hora_compra) VALUES (?, ?, ?, ?)", [numLimpo, obs, data, hora]);
+                        console.log(`[MOTOR] ✅ Compra Física Concluída e inserida: ${numLimpo} (${obs})`);
+                        
+                        // DISPARO AUTOMÁTICO DE AGRADCIMENTO DE COMPRAS!
+                        const targetId = numLimpo + '@c.us';
+                        const wppAgradece = `Oi! 👋 Aqui é a equipe *BitPé Calçados*! 🦶✨\n\nMuito obrigado pela sua compra de ${obs}! 💜 Ficamos imensamente felizes pela sua preferência.\n\n🎁 *QUER 10% DE DESCONTO na próxima compra?*\nÉ só postar uma foto marcando a gente lá no nosso Instagram: https://instagram.com/bitpecalcados\n\nAbraços!`;
+                        try {
+                            await this.client.sendMessage(targetId, wppAgradece);
+                            console.log(`[MOTOR] 📨 Mensagem de AGRADECIMENTO envida para ${targetId}!`);
+                        } catch (e) {
+                            console.error(`[MOTOR] ❌ Falha ao tentar mandar msg de agradecimento:`, e.message);
+                        }
+
+                    }
+                    else if (IA_Decisao.acao === 'salvar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
+                        const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
+                        const obs = IA_Decisao.detalhes.observacao_ou_produto || "";
+                        
+                        // Apenas salva silencioamente na tabela de LEADs quentes por Falta de Estoque
+                        const existe = queryOne("SELECT id FROM leads WHERE telefone = ?", [numLimpo]);
+                        if (!existe) {
+                            execute("INSERT INTO leads (telefone, observacao_ou_produto) VALUES (?, ?)", [numLimpo, obs]);
+                            console.log(`[MOTOR] 🕵️‍♂️ Lead Inserido Furtivamente (Sem disparo de PV): ${numLimpo}`);
+                        } else {
+                            console.log(`[MOTOR] Lead ${numLimpo} já existia no radar frio.`);
+                        }
+                    } 
+                    else if (IA_Decisao.acao === 'apagar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
+                        const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
+                        execute("DELETE FROM leads WHERE telefone = ?", [numLimpo]);
+                        console.log(`[MOTOR] 🗑️ Varreram o numero ${numLimpo} dos leads perdidos.`);
+                    }
+                    else if (IA_Decisao.acao === 'bloco_de_notas' && IA_Decisao.detalhes && IA_Decisao.detalhes.anotacao_stranha) {
+                        execute("INSERT INTO bloco_notas (anotacao) VALUES (?)", [IA_Decisao.detalhes.anotacao_stranha]);
+                        console.log(`[MOTOR] 📝 Uma anotação obscura foi repassada para os Programadores auditarem.`);
+                    }
+                    else if (IA_Decisao.acao === 'contar_leads') {
+                        const countLeads = queryOne("SELECT COUNT(*) as total FROM leads");
+                        const countCompras = queryOne("SELECT COUNT(*) as total FROM compras");
+                        const infoMsg = `\n\n📊 *DADOS BITPÉ:*\n- Clientes Atendidos/Compras: ${countCompras ? countCompras.total : 0}\n- Leads em radar (Falta estoque): ${countLeads ? countLeads.total : 0}`;
+                        // Acopla os dados fisicos reais na fala da IA.
+                        IA_Decisao.mensagem_para_grupo += infoMsg;
+                    }
+
+                    // Por fim, imprime no grupo as palavras fofas da nossa heroína
                     if (IA_Decisao.mensagem_para_grupo) {
-                        // Responde no WhatsApp SOMENTE o que ela planejou para o cliente
                         await msg.reply(IA_Decisao.mensagem_para_grupo);
                     } else {
-                        // Se ela se perder no personagem, envia tudo
                         await msg.reply(resposta_ia);
                     }
                 } catch (e) {
-                    // Se a IA não devolver formato JSON, envia o texto puro para não crashar
-                    await msg.reply(resposta_ia);
+                    await msg.reply(resposta_ia); // Dispara os cacos brutos caso ela alucine fora do JSON
                 }
 
-                console.log(`[TESTE V2] ✅ Mensagem enviada de volta para o cliente.`);
+                console.log(`[TESTE V2] ✅ O Motor encerrou seu clico com sucesso.`);
             } catch (erro) {
                 console.error("[WHATSAPP] O Cérebro deu tela azul:", erro);
             }

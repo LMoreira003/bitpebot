@@ -58,6 +58,24 @@ async function initDB() {
     `);
 
     db.run(`
+        CREATE TABLE IF NOT EXISTS leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            telefone TEXT NOT NULL,
+            observacao_ou_produto TEXT DEFAULT '',
+            status_mensagem TEXT DEFAULT 'pendente',
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS bloco_notas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anotacao TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    `);
+
+    db.run(`
         CREATE TABLE IF NOT EXISTS config (
             chave TEXT PRIMARY KEY,
             valor TEXT NOT NULL

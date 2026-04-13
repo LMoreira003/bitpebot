@@ -72,7 +72,8 @@ class CerebroAI {
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        model: "glm-4.7", // Usando o modelo rápido e leve testado agorinha
+                        model: "claude-3-haiku-20240307", // Substituindo para uso direto se for padrão OpenAI, mas o usuário pediu um nome estrito: 
+                        model: "claude-4-ch-exp", // O nome exato que você confia
                         messages: [
                             { role: "system", content: system_prompt },
                             { role: "user", content: prompt }
@@ -87,10 +88,19 @@ class CerebroAI {
                 }
 
                 if (!response.ok) {
-                    throw new Error(`Servidor Airforce Status ${response.status}`);
+                    // Pega o que o servidor falou se der erro
+                    const textError = await response.text();
+                    throw new Error(`Airforce Status ${response.status} -> ${textError}`);
                 }
 
                 const data = await response.json();
+                
+                // Barreira de segurança crucial (A que derrubou seu log antes)
+                if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
+                     console.error(`[CÉREBRO] 🚨 PARE! A Airforce conectou, mas devolveu esse pacote esquisito:`, JSON.stringify(data));
+                     tentativas++;
+                     continue; // Pula pra próxima chave em vez de dar undefined!
+                }
                 
                 // Sucesso! Registra que a chave gastou cota no arquivo físico.
                 keyObj.requests = (keyObj.requests || 0) + 1;
@@ -99,7 +109,7 @@ class CerebroAI {
                 return data.choices[0].message.content;
 
             } catch (err) {
-                console.error(`[CÉREBRO] Falha de conexão: ${err.message}`);
+                console.error(`[CÉREBRO] Falha de conexão na tentativa: ${err.message}`);
                 tentativas++;
             }
         }

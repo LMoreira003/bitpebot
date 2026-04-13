@@ -1,0 +1,16 @@
+{
+  "name": "botbitpe-whatsapp",
+  "version": "1.0.0",
+  "description": "Bot WhatsApp pós-venda BitPé Calçados",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "qrcode": "^1.5.4",
+    "sql.js": "^1.10.3",
+    "whatsapp-web.js": "^1.26.1-alpha.3"
+  }
+}

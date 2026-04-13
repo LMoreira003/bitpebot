@@ -85,17 +85,27 @@ class WhatsAppBot {
             console.log(`======================================================`);
 
             try {
-                // 2. O SYSTEM PROMPT NOVO (FORÇANDO MODO JSON)
-                const systemPrompt = `Você é a inteligência artificial do grupo de WhatsApp, controlando o bot da BitPé.
-Seu objetivo é analisar o que o cliente disse e decidir se ele quer tirar uma dúvida, ou se é para anotar o número dele para futuras compras (falta de estoque).
+                // 2. O SYSTEM PROMPT NOVO (MVP ASSISTENTE ADMINISTRATIVO STRANGE)
+                const systemPrompt = `Você é o Bot Assistente Interno da BitPé calçados, operando de forma séria e ágil em um grupo fechado de funcionários.
+Seu objetivo primário é ler as conversas dos funcionários e extrair leads de contatos.
 
-Você é obrigado a responder apenas no formato JSON abaixo, sem texto extra em volta:
+REGRAS:
+1. Se um funcionário enviar um número solicitando salvamento e o motivo (ex: "salva esse num 62999... não tinha nike 42"), sua ação é salvar o lead.
+2. Se um funcionário jogar apenas um número "62...9" na roda ou informações muito quebradas, você fará uma pergunta devolta ao funcionário no grupo (Ex: "Qual foi o motivo desse lead galera? Falta de estoque? Tem nome?").
+3. Se mandarem algo absurdo ou incompreensível para o sistema de leads, invoque o "bloco_de_notas". Você avisa que não entendeu, mas que salvou a ocorrência no bloco de notas para o dono ver depois.
+
+Você é OBRIGADO a responder estritamente um JSON limpo, sem texto em volta:
 {
-  "mensagem_para_grupo": "sua resposta humanizada respondendo do grupo",
-  "acao": "nenhuma_acao" ou "salvar_lead" ou "pergunta"
+  "acao": "salvar_lead" ou "perguntar_funcionario" ou "bloco_de_notas" ou "nenhuma_acao",
+  "mensagem_para_grupo": "Sua resposta humana com emojis comunicando claramente pro funcionário no grupo o que você fez ou decidiu.",
+  "detalhes": {
+    "telefone_extraido": "629999999 se houver",
+    "observacao_ou_produto": "observações extraídas",
+    "anotacao_stranha": "se usou o bloco de notas, digite aqui a justificativa"
+  }
 }`;
 
-                console.log(`[TESTE V2] 🚀 Enviando a mensagem crua para a IA na Airforce...`);
+                console.log(`[TESTE V2] 🚀 Enviando a mensagem crua para a IA na Nuvem do Google...`);
                 // Chama o cerebro da AI para pensar
                 let resposta_ia = await cerebro.pensar(msg.body, systemPrompt);
 
@@ -103,11 +113,23 @@ Você é obrigado a responder apenas no formato JSON abaixo, sem texto extra em 
                 console.log(resposta_ia);
 
                 // 3. RETORNO PARA O GRUPO
-                // Neste formato de TESTE inicial, a gente cospe o texto Json direto no zap ou tenta extrair
-                // Só pro cliente ver que bateu e voltou lá!
-                await msg.reply(resposta_ia);
+                try {
+                    // Transforma o texto de volta em um Objeto que o Javascript entende
+                    const IA_Decisao = JSON.parse(resposta_ia);
+                    
+                    if (IA_Decisao.mensagem_para_grupo) {
+                        // Responde no WhatsApp SOMENTE o que ela planejou para o cliente
+                        await msg.reply(IA_Decisao.mensagem_para_grupo);
+                    } else {
+                        // Se ela se perder no personagem, envia tudo
+                        await msg.reply(resposta_ia);
+                    }
+                } catch (e) {
+                    // Se a IA não devolver formato JSON, envia o texto puro para não crashar
+                    await msg.reply(resposta_ia);
+                }
 
-                console.log(`[TESTE] ✅ Mensagem enviada de volta para o cliente.`);
+                console.log(`[TESTE V2] ✅ Mensagem enviada de volta para o cliente.`);
             } catch (erro) {
                 console.error("[WHATSAPP] O Cérebro deu tela azul:", erro);
             }

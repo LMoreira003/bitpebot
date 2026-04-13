@@ -27,6 +27,9 @@ class CerebroAI {
         // SISTEMA DE FILA (MUTEX / FUNIL DOURADO)
         // Isso impede o atropelamento: uma mensagem só entra no funil quando a outra sair!
         this.filaDeProcessamento = Promise.resolve();
+        
+        // CATRACA DE CHAVES (Desgaste uniforme)
+        this.indiceChaveAtual = 0;
     }
 
     async pensar(prompt, system_prompt = "Você é um bot assistente de uma loja chamada BitPé.") {
@@ -40,6 +43,9 @@ class CerebroAI {
                 } catch (e) {
                     reject(e);
                 } finally {
+                    // Após a requisição terminar (sucesso ou falha total), giramos a catraca para o próximo cliente
+                    this.indiceChaveAtual = (this.indiceChaveAtual + 1) % this.keys.length;
+                    
                     // Atrasa a próxima tarefa da fila para dar respiro (Cooldown)
                     await new Promise(r => setTimeout(r, 2000));
                 }
@@ -51,8 +57,9 @@ class CerebroAI {
         let tentativas = 0;
         
         while (tentativas < 5) { 
-            // O balanceamento de Roleta (Roda de Modelos x Chaves)
-            const chaveAtual = this.keys[tentativas % this.keys.length];
+            // O balanceamento de Roleta somado com a Catraca Cíclica
+            const startIndex = (this.indiceChaveAtual + tentativas) % this.keys.length;
+            const chaveAtual = this.keys[startIndex];
             const modeloAtual = this.modelos[tentativas % this.modelos.length];
 
             console.log(`[CÉREBRO GOOGLE] 📡 Construindo nave... (Modelo: ${modeloAtual} | Chave: *${chaveAtual.slice(-5)})`);

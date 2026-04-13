@@ -157,12 +157,19 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
                         
                         // PV limpo e agradável
-                        const targetId = numLimpo + '@c.us';
                         const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe *BitPé Calçados*! 🦶✨\n\nMuito obrigado pela sua compra de um maravilhoso ${prodInfo}! 💜 Ficamos imensamente felizes pela sua preferência.\n\n🎁 *QUER 10% DE DESCONTO na próxima compra?*\nÉ só postar uma foto marcando a gente lá no nosso Instagram: https://instagram.com/bitpecalcados\n\nAbraços!`;
+                        
                         try {
-                            await this.client.sendMessage(targetId, wppAgradece);
+                            // Validação do Nono dígito: O Whatsapp resolve internamente se esse número existe e qual é o ID correto dele
+                            const idOficialWhatsapp = await this.client.getNumberId(numLimpo);
+                            
+                            if (idOficialWhatsapp) {
+                                await this.client.sendMessage(idOficialWhatsapp._serialized, wppAgradece);
+                            } else {
+                                console.error(`[MOTOR] ⚠️ PV Cancelado: O número ${numLimpo} não foi encontrado nos registros do Whatsapp (Talvez falte ou sobre um dígito).`);
+                            }
                         } catch (e) {
-                            console.error(`[MOTOR] ❌ PV falhou:`, e.message);
+                            console.error(`[MOTOR] ❌ PV falhou criticamente:`, e.message);
                         }
                     }
                     else if (IA_Decisao.acao === 'salvar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {

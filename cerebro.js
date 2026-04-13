@@ -3,122 +3,118 @@ const path = require('path');
 
 class CerebroAI {
     constructor() {
-        this.keysPath = path.join(__dirname, 'keys.json');
-        this.pool = [];
-        this.carregarChaves();
-    }
-
-    carregarChaves() {
+        // Chaves protegidas! Ele vai ler fisicamente o texto do arquivo .env que sua tela da AWS criou.
+        let keysString = "";
         try {
-            if (fs.existsSync(this.keysPath)) {
-                const data = JSON.parse(fs.readFileSync(this.keysPath, 'utf8'));
-                this.pool = data.pool || [];
-                console.log(`[CÉREBRO] 🧠 ${this.pool.length} chaves da Airforce carregadas no tambor!`);
+            const envPath = path.join(__dirname, '.env');
+            if (fs.existsSync(envPath)) {
+                const envTexto = fs.readFileSync(envPath, 'utf8');
+                const match = envTexto.match(/GEMINI_KEYS="([^"]+)"/);
+                if (match) keysString = match[1];
             } else {
-                console.warn('[CÉREBRO] Arquivo keys.json não encontrado. A IA não vai funcionar.');
+                console.log("[CÉREBRO GOOGLE] ⚠️ Arquivo .env não achado, vou tentar usar variável de sistema.");
+                keysString = process.env.GEMINI_KEYS || "";
             }
-        } catch (e) {
-            console.error('[CÉREBRO] Erro ao ler keys.json:', e);
-        }
-    }
+        } catch (e) { }
 
-    salvarChaves() {
-        try {
-            fs.writeFileSync(this.keysPath, JSON.stringify({ pool: this.pool }, null, 2));
-        } catch (e) {
-            console.error('[CÉREBRO] Erro ao salvar log de requests nas chaves.', e);
-        }
-    }
-
-    obterChaveBalanceada() {
-        // Pega apenas as chaves ativas
-        const ativas = this.pool.filter(k => k.status === 'active');
-        if (ativas.length === 0) return null;
+        this.keys = keysString.split(',').map(k => k.trim()).filter(k => k.length > 5);
         
-        // Pega sempre a que tem o MENOR número de requests (Balanceamento de Carga)
-        ativas.sort((a, b) => (a.requests || 0) - (b.requests || 0));
-        return ativas[0];
-    }
-
-    marcarErro(chaveStr) {
-        const keyObj = this.pool.find(k => k.key === chaveStr);
-        if (keyObj) {
-            keyObj.status = 'exhausted'; // Queimou o limite
-            this.salvarChaves();
-            console.log(`[CÉREBRO] ❌ Chave final ${chaveStr.slice(-5)} banida temporariamente por limites!`);
-        }
+        // Os modelos do futuro que você confia (Deixamos APENAS o rei da velocidade que não restringe cota grátis)
+        this.modelos = [
+            'gemini-3-flash-preview'
+        ];
+        
+        // SISTEMA DE FILA (MUTEX / FUNIL DOURADO)
+        // Isso impede o atropelamento: uma mensagem só entra no funil quando a outra sair!
+        this.filaDeProcessamento = Promise.resolve();
     }
 
     async pensar(prompt, system_prompt = "Você é um bot assistente de uma loja chamada BitPé.") {
-        let tentativas = 0;
-        const MODELO = "claude-4-ch-exp"; // O modelo blindado
-        
-        // Fila de backup: se uma chave der limite de requisição, ele tenta em outras até 5x sem o cliente perceber!
-        while (tentativas < 5) { 
-            const keyObj = this.obterChaveBalanceada();
-            if (!keyObj) {
-                console.error("[CÉREBRO] ERRO CRÍTICO: Todas as suas chaves foram banidas ou acabaram os limites.");
-                return "Estou sobrecarregado no momento, chame um humano.";
-            }
+        return new Promise((resolve, reject) => {
+            // Coloca a requisição no final da fila. 
+            // Se houver 3 mensagens ao mesmo tempo, a 2ª só entra quando a 1ª terminar.
+            this.filaDeProcessamento = this.filaDeProcessamento.then(async () => {
+                try {
+                    const resultado = await this._executarNaAcessoLivre(prompt, system_prompt);
+                    resolve(resultado);
+                } catch (e) {
+                    reject(e);
+                } finally {
+                    // Atrasa a próxima tarefa da fila para dar respiro (Cooldown)
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            });
+        });
+    }
 
-            const apiKey = keyObj.key;
-            console.log(`[CÉREBRO] 📡 Disparando... (Modelo: ${MODELO} | Chave: *${apiKey.slice(-5)})`);
+    async _executarNaAcessoLivre(prompt, system_prompt) {
+        let tentativas = 0;
+        
+        while (tentativas < 5) { 
+            // O balanceamento de Roleta (Roda de Modelos x Chaves)
+            const chaveAtual = this.keys[tentativas % this.keys.length];
+            const modeloAtual = this.modelos[tentativas % this.modelos.length];
+
+            console.log(`[CÉREBRO GOOGLE] 📡 Construindo nave... (Modelo: ${modeloAtual} | Chave: *${chaveAtual.slice(-5)})`);
 
             try {
-                // Na versão do Node mais recente, o fetch é nativo. O Render usa o Node v20+.
-                const response = await fetch("https://api.airforce/v1/chat/completions", {
-                    method: "POST",
-                    headers: {
-                        "Authorization": `Bearer ${apiKey}`,
-                        "Content-Type": "application/json"
+                // Estrutura exigida oficialmente pelo Google Gemini v1beta
+                const payload = {
+                    systemInstruction: {
+                        parts: [{ text: system_prompt }]
                     },
-                    body: JSON.stringify({
-                        model: MODELO,
-                        messages: [
-                            { role: "system", content: system_prompt },
-                            { role: "user", content: prompt }
-                        ]
-                    })
+                    contents: [{
+                        parts: [{ text: prompt }]
+                    }]
+                };
+
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${chaveAtual}`;
+
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
                 });
 
                 if (response.status === 429 || response.status === 403 || response.status === 401) {
-                    this.marcarErro(apiKey);
+                    console.log(`[CÉREBRO GOOGLE] ❌ Modelo ou Chave *${chaveAtual.slice(-5)} encheu o saco (${response.status})!`);
                     tentativas++;
-                    console.log(`[CÉREBRO] ⏳ Aguardando 2s antes de tentar a próxima chave...`);
-                    await new Promise(r => setTimeout(r, 2000)); // DELAY ANTI-SPAM
+                    console.log(`[CÉREBRO GOOGLE] ⏳ Aguardando respiro (2s) antes de rodar a roleta da próxima chave/modelo...`);
+                    await new Promise(r => setTimeout(r, 2000));
                     continue; 
                 }
 
                 if (!response.ok) {
                     const textError = await response.text();
-                    throw new Error(`Airforce Status ${response.status} -> ${textError}`);
+                    throw new Error(`Google Status ${response.status} -> ${textError}`);
                 }
 
                 const data = await response.json();
                 
-                // Barreira de segurança (A que derrubou seu log antes)
-                if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
-                     console.error(`[CÉREBRO] 🚨 A Airforce mandou um pacote bizarro pelo modelo ${MODELO}:`, JSON.stringify(data));
+                // Validação extrema de corpo do Gemini
+                if (!data || !data.candidates || !data.candidates[0] || !data.candidates[0].content || !data.candidates[0].content.parts) {
+                     console.error(`[CÉREBRO GOOGLE] 🚨 O Google pirou e mandou um pacote vazio/estranho:`, JSON.stringify(data));
                      tentativas++;
-                     console.log(`[CÉREBRO] ⏳ Aguardando 2s antes de pular de chave...`);
                      await new Promise(r => setTimeout(r, 2000));
                      continue; 
                 }
                 
-                // Sucesso! Registra que a chave gastou cota no arquivo físico.
-                keyObj.requests = (keyObj.requests || 0) + 1;
-                this.salvarChaves();
+                let respostaLimpa = data.candidates[0].content.parts[0].text;
                 
-                return data.choices[0].message.content;
+                // Opcional: limpar bordas sujas The Gemini costuma envolver JSON puro em `json ... ` no markdown.
+                respostaLimpa = respostaLimpa.replace(/```json/g, '').replace(/```/g, '').trim();
+
+                return respostaLimpa;
 
             } catch (err) {
-                console.error(`[CÉREBRO] Falha grave na conexão: ${err.message}`);
+                console.error(`[CÉREBRO GOOGLE] 🚨 Falha grave na conexão: ${err.message}`);
                 tentativas++;
                 await new Promise(r => setTimeout(r, 2000));
             }
         }
         
-        return "Minha mente bugou, tem muitas mensagens chegando! Aguarde um instante...";
+        // Se a API torrar todas as 5 chances dele
+        return JSON.stringify({ mensagem_para_grupo: "Minha conexão com a Mente-Mestra falhou! Tente daqui a pouco.", acao: "nenhuma_acao" });
     }
 }
 

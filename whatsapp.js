@@ -48,12 +48,22 @@ class WhatsAppBot {
         });
 
         // Evento: Cliente pronto
-        this.client.on('ready', () => {
+        this.client.on('ready', async () => {
             console.log('[BOT] ✅ WhatsApp conectado!');
             this.status = 'conectado';
             this.qrCodeData = null;
             this.info = this.client.info;
             console.log('[BOT] Número:', this.info?.wid?.user || 'desconhecido');
+            
+            try {
+                // Ao ligar o servidor, ele busca a gaveta do grupo e avisa que voltou a vida!
+                const grupoSalvo = queryOne("SELECT valor FROM config WHERE chave = 'grupo_oficial'");
+                if (grupoSalvo && grupoSalvo.valor) {
+                    await this.client.sendMessage(grupoSalvo.valor, "🤖 *SISTEMA REINICIADO*\nFui atualizado e estou 100% online novamente! ✅");
+                }
+            } catch (e) {
+                console.log("[BOT] Sem grupo oficial salvo ainda para anunciar startup.");
+            }
         });
 
         // Evento: Autenticado
@@ -76,14 +86,23 @@ class WhatsAppBot {
             const textoLimpo = msg.body.toLowerCase();
             const marcouArroubaBot = textoLimpo.includes('@bot');
             
-            // Tratamento hiper-blindado pra checar se ele foi mencionado sem crashar se as variáveis de sessão não tiverem carregado =
+            // Tratamento hiper-blindado pra checar se ele foi MENCIONADO com o @oficial do whatsapp
             let marcouOCelular = false;
-            if (msg.mentionedIds && this.client && this.client.info && this.client.info.wid) {
-                marcouOCelular = msg.mentionedIds.includes(this.client.info.wid._serialized);
+            if (msg.mentionedIds && msg.mentionedIds.length > 0 && this.client && this.client.info && this.client.info.wid) {
+                const meuNumeroBase = this.client.info.wid.user; // Pega só os números: Ex '556291234567'
+                // Se algum dos IDs mencionados conter o número base do bot, foi marcado!
+                marcouOCelular = msg.mentionedIds.some(id => id.includes(meuNumeroBase));
             }
             
             if (!marcouArroubaBot && !marcouOCelular) {
                 return; // Ignora os papos furados do grupo e fica quieto sem quebrar.
+            }
+            
+            // GRAVADOR DO GRUPO OFICIAL: Se ele foi marcado num grupo, guarda o ID desse grupo pra poder avisar depois!
+            if (msg.from.endsWith('@g.us')) {
+                 try {
+                     execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('grupo_oficial', ?)", [msg.from]);
+                 } catch(e){}
             }
 
             console.log(`\n======================================================`);
@@ -101,7 +120,7 @@ REGRAS:
 2. FALTA/LEAD: Se pedirem pra salvar pq NÃO TINHA O PRODUTO, a ação é "salvar_lead".
 3. APAGAR: Para EXCLUIR um número, ação "apagar_lead".
 4. ESTATÍSTICA: Se alguem perguntar "Quantos numeros tem salvos?", responda APENAS que vai verificar. Ação "contar_leads".
-5. SEM CONTEXTO: Se o funcionário jogar apenas um número, pergunte sobre o que é. Ação "perguntar_funcionario".
+5. SEM CONTEXTO E COMO USAR: Se perguntarem o que você faz ou se mandarem uma mensagem solta só com um número, ensine a equipe de forma gentil! Diga que você organiza vendas e leads. Ensine que a forma correta de mandar pra você é sempre informar o "Número de Telefone, o Nome do Cliente e o Produto". Ação "perguntar_funcionario".
 6. LIXO: Mensagens indecifráveis geram ação "bloco_de_notas".
 
 OBSERVAÇÃO DA RESPOSTA: Você deve ser natural e cirúrgico. Sepeare as informações para salvar.
@@ -191,8 +210,8 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         const countLeads = queryOne("SELECT COUNT(*) as total FROM leads");
                         const countCompras = queryOne("SELECT COUNT(*) as total FROM compras");
                         
-                        // Em vez de mesclar na fala dela, nós engatilhamos para ser disparado numa segunda bolha!
-                        infoMsgParaEnviarDepois = `📊 *MÉTRICAS BITPÉ CHECADAS:*\n\n✅ Vendas Concluídas hoje: ${countCompras ? countCompras.total : 0}\n⚠️ Leads de Falta de Estoque: ${countLeads ? countLeads.total : 0}\n\nPainel físico da Amazon 100% online.`;
+                        // Em vez de mesclar na fala dela, nós engatilhamos para ser disparado numa segunda bolha limpa
+                        infoMsgParaEnviarDepois = `📊 *MÉTRICAS GERAIS:*\n\n✅ Vendas Concluídas: ${countCompras ? countCompras.total : 0}\n⚠️ Leads de Estoque: ${countLeads ? countLeads.total : 0}`;
                     }
 
                     // 1. O Bot envia a resposta natural no grupo primeiro

@@ -92,7 +92,6 @@ class WhatsAppBot {
             console.log(`======================================================`);
 
             try {
-            try {
                 // 2. O SYSTEM PROMPT VERDADEIRO (A LÓGICA DO ARQUITETO)
                 const systemPrompt = `Você é o Bot Interno da BitPé calçados, operando no grupo de funcionários. O dono é o ADM / Programador do sistema.
 Seu objetivo é ler as solicitações dos funcionários para gerenciar clientes. Você agora recebe o "Contexto Recente" da conversa para lembrar do que estavam falando.

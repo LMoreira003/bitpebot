@@ -51,6 +51,7 @@ class CerebroAI {
 
     async pensar(prompt, system_prompt = "Você é um bot assistente de uma loja chamada BitPé.") {
         let tentativas = 0;
+        const MODELO = "claude-4-ch-exp"; // O modelo blindado
         
         // Fila de backup: se uma chave der limite de requisição, ele tenta em outras até 5x sem o cliente perceber!
         while (tentativas < 5) { 
@@ -61,7 +62,7 @@ class CerebroAI {
             }
 
             const apiKey = keyObj.key;
-            console.log(`[CÉREBRO] Analisando mensagem (Chave: *${apiKey.slice(-5)})`);
+            console.log(`[CÉREBRO] 📡 Disparando... (Modelo: ${MODELO} | Chave: *${apiKey.slice(-5)})`);
 
             try {
                 // Na versão do Node mais recente, o fetch é nativo. O Render usa o Node v20+.
@@ -72,8 +73,7 @@ class CerebroAI {
                         "Content-Type": "application/json"
                     },
                     body: JSON.stringify({
-                        model: "claude-3-haiku-20240307", // Substituindo para uso direto se for padrão OpenAI, mas o usuário pediu um nome estrito: 
-                        model: "claude-4-ch-exp", // O nome exato que você confia
+                        model: MODELO,
                         messages: [
                             { role: "system", content: system_prompt },
                             { role: "user", content: prompt }
@@ -84,22 +84,25 @@ class CerebroAI {
                 if (response.status === 429 || response.status === 403 || response.status === 401) {
                     this.marcarErro(apiKey);
                     tentativas++;
-                    continue; // Roda o loop e tenta a PRÓXIMA chave!
+                    console.log(`[CÉREBRO] ⏳ Aguardando 2s antes de tentar a próxima chave...`);
+                    await new Promise(r => setTimeout(r, 2000)); // DELAY ANTI-SPAM
+                    continue; 
                 }
 
                 if (!response.ok) {
-                    // Pega o que o servidor falou se der erro
                     const textError = await response.text();
                     throw new Error(`Airforce Status ${response.status} -> ${textError}`);
                 }
 
                 const data = await response.json();
                 
-                // Barreira de segurança crucial (A que derrubou seu log antes)
+                // Barreira de segurança (A que derrubou seu log antes)
                 if (!data || !data.choices || !data.choices[0] || !data.choices[0].message) {
-                     console.error(`[CÉREBRO] 🚨 PARE! A Airforce conectou, mas devolveu esse pacote esquisito:`, JSON.stringify(data));
+                     console.error(`[CÉREBRO] 🚨 A Airforce mandou um pacote bizarro pelo modelo ${MODELO}:`, JSON.stringify(data));
                      tentativas++;
-                     continue; // Pula pra próxima chave em vez de dar undefined!
+                     console.log(`[CÉREBRO] ⏳ Aguardando 2s antes de pular de chave...`);
+                     await new Promise(r => setTimeout(r, 2000));
+                     continue; 
                 }
                 
                 // Sucesso! Registra que a chave gastou cota no arquivo físico.
@@ -109,8 +112,9 @@ class CerebroAI {
                 return data.choices[0].message.content;
 
             } catch (err) {
-                console.error(`[CÉREBRO] Falha de conexão na tentativa: ${err.message}`);
+                console.error(`[CÉREBRO] Falha grave na conexão: ${err.message}`);
                 tentativas++;
+                await new Promise(r => setTimeout(r, 2000));
             }
         }
         

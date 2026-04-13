@@ -80,8 +80,8 @@ class WhatsAppBot {
             }
 
             console.log(`\n======================================================`);
-            console.log(`[TESTE] 🔔 GATILHO ACIONADO POR ${msg.from}!`);
-            console.log(`[TESTE] 📩 MENSAGEM LIDA: "${msg.body}"`);
+            console.log(`[TESTE V2] 🔔 GATILHO ACIONADO POR ${msg.from}!`);
+            console.log(`[TESTE V2] 📩 MENSAGEM LIDA: "${msg.body}"`);
             console.log(`======================================================`);
 
             try {
@@ -95,11 +95,11 @@ Você é obrigado a responder apenas no formato JSON abaixo, sem texto extra em 
   "acao": "nenhuma_acao" ou "salvar_lead" ou "pergunta"
 }`;
 
-                console.log(`[TESTE] 🚀 Enviando a mensagem crua para a IA na Airforce...`);
+                console.log(`[TESTE V2] 🚀 Enviando a mensagem crua para a IA na Airforce...`);
                 // Chama o cerebro da AI para pensar
                 let resposta_ia = await cerebro.pensar(msg.body, systemPrompt);
 
-                console.log(`\n[TESTE] 🧠 RETORNO BRUTO DA IA (Como o seu código vai ler ela):`);
+                console.log(`\n[TESTE V2] 🧠 RETORNO BRUTO DA IA (Como o seu código vai ler ela):`);
                 console.log(resposta_ia);
 
                 // 3. RETORNO PARA O GRUPO

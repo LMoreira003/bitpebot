@@ -116,18 +116,19 @@ class WhatsAppBot {
 Seu objetivo é ler as solicitações dos funcionários para gerenciar clientes. Você agora recebe o "Contexto Recente" da conversa para lembrar do que estavam falando.
 
 REGRAS:
-1. VENDA: Se alguém falar que o cliente COMPROU (ex: "cliente Lucas 629.. comprou babuche n41"), extraia TUDO! Ação: "salvar_compra".
-2. FALTA/LEAD: Se pedirem pra salvar pq NÃO TINHA O PRODUTO, a ação é "salvar_lead".
-3. APAGAR: Para EXCLUIR um número, ação "apagar_lead".
-4. ESTATÍSTICA: Se alguem perguntar "Quantos numeros tem salvos?", responda APENAS que vai verificar. Ação "contar_leads".
-5. SEM CONTEXTO E COMO USAR: Se perguntarem o que você faz ou se mandarem uma mensagem solta só com um número, ensine a equipe de forma gentil! Diga que você organiza vendas e leads. Ensine que a forma correta de mandar pra você é sempre informar o "Número de Telefone, o Nome do Cliente e o Produto". Ação "perguntar_funcionario".
-6. LIXO: Mensagens indecifráveis geram ação "bloco_de_notas".
+1. VENDA: Se falaram que o cliente COMPROU (ex: "bot Lucas 629.. comprou babuche 41"), extraia TUDO! Ação: "salvar_compra".
+2. FALTA/LEAD: Se pedirem pra salvar pq NÃO TINHA (ex: "bot n tinha bota 39 629.."), a ação é "salvar_lead".
+3. APAGAR: Para EXCLUIR um número (ex: "apaga o 62..."), ação "apagar_lead".
+4. ESTATÍSTICA: Se perguntarem "Quantos numeros tem salvos?", responda que vai olhar as métricas. Ação "contar_leads".
+5. LISTAR DADOS: Se falarem "mostre os dados", "mostre quem vc salvou" ou "liste os numeros", responda que vai gerar o arquivo. Ação "listar_dados".
+6. ENSINAR USO: Se perguntarem "o que vc faz", "como te usar" ou mandarem mais de 1 número em uma única frase: diga à equipe que gerará um manual. Ação "explicar_uso".
+7. LIXO: Mensagens indecifráveis geram ação "bloco_de_notas".
 
-OBSERVAÇÃO DA RESPOSTA: Você deve ser natural e cirúrgico. Sepeare as informações para salvar.
+OBSERVAÇÃO DA RESPOSTA: Você deve ser natural e cirúrgico. Sepeare as informações para salvar. No "telefone_extraido" você processa e aceita apenas UM número por vez.
 Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em volta:
 {
-  "acao": "salvar_compra" ou "salvar_lead" ou "apagar_lead" ou "contar_leads" ou "perguntar_funcionario" ou "bloco_de_notas" ou "nenhuma_acao",
-  "mensagem_para_grupo": "Sua resposta com emojis comunicando pro grupo a decisão.",
+  "acao": "salvar_compra" ou "salvar_lead" ou "apagar_lead" ou "contar_leads" ou "listar_dados" ou "explicar_uso" ou "bloco_de_notas" ou "nenhuma_acao",
+  "mensagem_para_grupo": "Sua resposta curta com emojis comunicando pro grupo a decisão.",
   "detalhes": {
     "telefone_extraido": "6299999999 se houver",
     "nome_cliente": "Nome do cliente se foi falado na frase (ex: Lucas)",
@@ -179,16 +180,16 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe *BitPé Calçados*! 🦶✨\n\nMuito obrigado pela sua compra de um maravilhoso ${prodInfo}! 💜 Ficamos imensamente felizes pela sua preferência.\n\n🎁 *QUER 10% DE DESCONTO na próxima compra?*\nÉ só postar uma foto marcando a gente lá no nosso Instagram: https://instagram.com/bitpecalcados\n\nAbraços!`;
                         
                         try {
-                            // Validação do Nono dígito: O Whatsapp resolve internamente se esse número existe e qual é o ID correto dele
                             const idOficialWhatsapp = await this.client.getNumberId(numLimpo);
-                            
                             if (idOficialWhatsapp) {
                                 await this.client.sendMessage(idOficialWhatsapp._serialized, wppAgradece);
+                                // Nova Solitação do Chefe: Avisar o grupo que o PV funcionou em uma 2ª mensagem
+                                infoMsgParaEnviarDepois = `✅ *Notificação do Módulo de Disparo:*\nSalvei o número (${numLimpo}) com sucesso e já enviei a mensagem de agradecimento pelo Whatsapp no PV desse cliente! 🚀`;
                             } else {
-                                console.error(`[MOTOR] ⚠️ PV Cancelado: O número ${numLimpo} não foi encontrado nos registros do Whatsapp (Talvez falte ou sobre um dígito).`);
+                                console.error(`[MOTOR] ⚠️ O WhatsApp rejeitou a formatação.`);
                             }
                         } catch (e) {
-                            console.error(`[MOTOR] ❌ PV falhou criticamente:`, e.message);
+                            console.error(`[MOTOR] ❌ PV falhou:`, e.message);
                         }
                     }
                     else if (IA_Decisao.acao === 'salvar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
@@ -209,9 +210,26 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                     else if (IA_Decisao.acao === 'contar_leads') {
                         const countLeads = queryOne("SELECT COUNT(*) as total FROM leads");
                         const countCompras = queryOne("SELECT COUNT(*) as total FROM compras");
-                        
-                        // Em vez de mesclar na fala dela, nós engatilhamos para ser disparado numa segunda bolha limpa
                         infoMsgParaEnviarDepois = `📊 *MÉTRICAS GERAIS:*\n\n✅ Vendas Concluídas: ${countCompras ? countCompras.total : 0}\n⚠️ Leads de Estoque: ${countLeads ? countLeads.total : 0}`;
+                    }
+                    else if (IA_Decisao.acao === 'listar_dados') {
+                        // Busca no SQlite de trás pra frente pros mais novos surgirem e recorta em 5 cada
+                        const ultimasCompras = queryAll("SELECT telefone, nome_cliente, produto, numeracao FROM compras ORDER BY id DESC LIMIT 5");
+                        const ultimosLeads = queryAll("SELECT telefone, observacao_ou_produto FROM leads ORDER BY id DESC LIMIT 5");
+                        
+                        let txtListagem = `📋 *ÚLTIMOS REGISTROS NA BASE DE DADOS*\n`;
+                        txtListagem += `\n📦 *Últimas 5 Vendas Salvas:*`;
+                        ultimasCompras.forEach(c => txtListagem += `\n- ${c.nome_cliente || 'Sem nome'} | ${c.produto} (${c.numeracao})`);
+                        if (ultimasCompras.length === 0) txtListagem += `\nNenhuma ainda.`;
+
+                        txtListagem += `\n\n⚠️ *Últimos 5 Leads (Sem Estoque):*`;
+                        ultimosLeads.forEach(l => txtListagem += `\n- ${l.telefone} | Prod: ${l.observacao_ou_produto}`);
+                        if (ultimosLeads.length === 0) txtListagem += `\nNenhum ainda.`;
+
+                        infoMsgParaEnviarDepois = txtListagem;
+                    }
+                    else if (IA_Decisao.acao === 'explicar_uso') {
+                        infoMsgParaEnviarDepois = `🤖 *COMO TRABALHAR COMIGO (MANUAL RÁPIDO):*\n\n1️⃣ Sempre escreva a palavra *@bot* na mensagem para eu acordar.\n2️⃣ Me envie apenas **UM número de contato de cada vez**.\n3️⃣ Sempre informe na mesam frase o: *Nome do Cliente, o Produto, a Numeração e o Celular dele*. \n\n*Exemplo:* @bot, Maria comprou o tênis 35. Cel dela 62 9...\n\n4️⃣ *Aviso Importante:* Eu sou um Bot de Dados escrito em Node, eu **não ouço áudios e nem enxergo imagens**. Preciso que a equipe digite as informações! 😉`;
                     }
 
                     // 1. O Bot envia a resposta natural no grupo primeiro
@@ -222,9 +240,9 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         await msg.reply('Entendido.');
                     }
                     
-                    // 2. Se a Ordem for de contar leads, o Node.js envia os dados Puros logo em seguida (Efeito Delay Humano)
+                    // 2. O Node.js envia os dados Puros logo em seguida
                     if (infoMsgParaEnviarDepois) {
-                        await new Promise(resolve => setTimeout(resolve, 2500)); // Aguarda 2.5s pra parecer real
+                        await new Promise(resolve => setTimeout(resolve, 3000));
                         await this.client.sendMessage(msg.from, infoMsgParaEnviarDepois);
                     }
 

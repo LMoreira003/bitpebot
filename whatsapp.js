@@ -180,8 +180,8 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                             const prodInfo = cliente.produto || "seu calçado";
                             const numInfo = cliente.numeracao || "";
                             
-                            const data = new Date().toLocaleDateString('pt-BR');
-                            const hora = new Date().toLocaleTimeString('pt-BR');
+                            const data = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+                            const hora = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
                             
                             execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
                             
@@ -252,7 +252,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                         infoMsgParaEnviarDepois = txtListagem;
                     }
                     else if (IA_Decisao.acao === 'explicar_uso') {
-                        infoMsgParaEnviarDepois = `🤖 *COMO TRABALHAR COMIGO (MANUAL RÁPIDO):*\n\n1️⃣ Sempre escreva a palavra *@bot* na mensagem para eu acordar.\n2️⃣ Pode me enviar **VÁRIOS clientes em uma tacada só** se quiser, eu destrincho e organizo!\n3️⃣ Procure informar: *Nome do Cliente, Produto, Numeração e Celular*. \n\n*Exemplo:* @bot, Maria comprou tênis 35 Cel: 62 9.. e João comprou bota 40 Cel: 62 9...\n\n4️⃣ *Aviso Importante:* Eu não consigo ouvir áudios e nem entender imagens ainda. Preciso que a equipe digite as informações! 😉`;
+                        infoMsgParaEnviarDepois = `🤖 *COMO TRABALHAR COMIGO (MANUAL RÁPIDO):*\n\n1️⃣ Sempre escreva *@bot* na mensagem para eu acordar.\n2️⃣ Informe: *Nome do Cliente, Produto, Numeração e Celular*.\n\n*Exemplo:* @bot, Maria comprou tênis 35. Cel dela: 62 9...\n\n3️⃣ *Aviso Importante:* Eu não consigo ouvir áudios e nem entender imagens ainda. Preciso que a equipe digite as informações em texto! 😉`;
                     }
 
                     // 1. O Bot envia a resposta natural no grupo primeiro

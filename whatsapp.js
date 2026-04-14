@@ -260,17 +260,23 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
 
                     // 1. O Bot envia a resposta natural no grupo primeiro
                     if (IA_Decisao.mensagem_para_grupo) {
-                        await msg.reply(IA_Decisao.mensagem_para_grupo);
-                        this.memoriaConversa.push(IA_Decisao.mensagem_para_grupo); // Grava o que ele disse tbm!
-                    } else {
-                        await msg.reply('Entendido.');
-                    }
+                        try {
+                            await msg.reply(IA_Decisao.mensagem_para_grupo);
+                            this.memoriaConversa.push(IA_Decisao.mensagem_para_grupo); 
+                        } catch (e) {
+                            console.error("[MOTOR] Erro ao responder grupo:", e.message);
+                        }
+                    } 
                     
                     // 2. O Node.js envia os dados Puros logo em seguida
                     if (infoMsgParaEnviarDepois) {
                         await new Promise(resolve => setTimeout(resolve, 3000));
-                        await this.client.sendMessage(msg.from, infoMsgParaEnviarDepois);
-                        this.memoriaConversa.push(infoMsgParaEnviarDepois); // Carimba a Tabela de Dados interna no Córtex da IA!
+                        try {
+                            await this.client.sendMessage(msg.from, infoMsgParaEnviarDepois);
+                            this.memoriaConversa.push(infoMsgParaEnviarDepois);
+                        } catch (e) {
+                            console.error("[MOTOR] Erro ao enviar bolha de dados:", e.message);
+                        }
                     }
 
                 } catch (e) {

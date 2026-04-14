@@ -202,8 +202,11 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                     } 
                     else if (IA_Decisao.acao === 'apagar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
                         const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
-                        execute("DELETE FROM leads WHERE telefone = ?", [numLimpo]);
-                        execute("DELETE FROM compras WHERE telefone = ?", [numLimpo]);
+                        const numPuro = numLimpo.replace(/^55/, ''); // Cria uma versão sem o 55
+                        
+                        // Passamos o rodo em qualquer variação do número salvo na base
+                        execute("DELETE FROM leads WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
+                        execute("DELETE FROM compras WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
                     }
                     else if (IA_Decisao.acao === 'bloco_de_notas' && IA_Decisao.detalhes && IA_Decisao.detalhes.anotacao_stranha) {
                         execute("INSERT INTO bloco_notas (anotacao) VALUES (?)", [IA_Decisao.detalhes.anotacao_stranha]);

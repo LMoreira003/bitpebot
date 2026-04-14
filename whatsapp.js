@@ -117,8 +117,8 @@ Seu objetivo é ler as solicitações dos funcionários para gerenciar clientes.
 
 REGRAS:
 1. VENDA: Se falaram que o cliente COMPROU (ex: "bot Lucas 629.. comprou babuche 41"), extraia TUDO! Ação: "salvar_compra".
-2. FALTA/LEAD: Se pedirem pra salvar pq NÃO TINHA (ex: "bot n tinha bota 39 629.."), a ação é "salvar_lead".
-3. APAGAR: Para EXCLUIR um número (ex: "apaga o 62..."), ação "apagar_lead".
+2. FALTA/LEAD: Se pedirem pra salvar pq NÃO TINHA (ex: "bot n tinha bota 39 629.."), a ação: "salvar_lead".
+3. APAGAR: Para EXCLUIR um cliente ou número, ache o número no seu [CONTEXTO RECENTE] e retorne a ação "apagar_lead".
 4. ESTATÍSTICA: Se perguntarem "Quantos numeros tem salvos?", responda que vai olhar as métricas. Ação "contar_leads".
 5. LISTAR DADOS: Se falarem "mostre os dados", "mostre quem vc salvou" ou "liste os numeros", responda que vai gerar o arquivo. Ação "listar_dados".
 6. ENSINAR USO: Se perguntarem "o que vc faz", "como te usar" ou mandarem mais de 1 número em uma única frase: diga à equipe que gerará um manual. Ação "explicar_uso".
@@ -203,6 +203,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                     else if (IA_Decisao.acao === 'apagar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
                         const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
                         execute("DELETE FROM leads WHERE telefone = ?", [numLimpo]);
+                        execute("DELETE FROM compras WHERE telefone = ?", [numLimpo]);
                     }
                     else if (IA_Decisao.acao === 'bloco_de_notas' && IA_Decisao.detalhes && IA_Decisao.detalhes.anotacao_stranha) {
                         execute("INSERT INTO bloco_notas (anotacao) VALUES (?)", [IA_Decisao.detalhes.anotacao_stranha]);
@@ -219,7 +220,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         
                         let txtListagem = `📋 *ÚLTIMOS REGISTROS NA BASE DE DADOS*\n`;
                         txtListagem += `\n📦 *Últimas 5 Vendas Salvas:*`;
-                        ultimasCompras.forEach(c => txtListagem += `\n- ${c.nome_cliente || 'Sem nome'} | ${c.produto} (${c.numeracao})`);
+                        ultimasCompras.forEach(c => txtListagem += `\n- ${c.nome_cliente || 'Sem nome'} | Tel: ${c.telefone} | Prod: ${c.produto}`);
                         if (ultimasCompras.length === 0) txtListagem += `\nNenhuma ainda.`;
 
                         txtListagem += `\n\n⚠️ *Últimos 5 Leads (Sem Estoque):*`;
@@ -244,6 +245,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                     if (infoMsgParaEnviarDepois) {
                         await new Promise(resolve => setTimeout(resolve, 3000));
                         await this.client.sendMessage(msg.from, infoMsgParaEnviarDepois);
+                        this.memoriaConversa.push(infoMsgParaEnviarDepois); // Carimba a Tabela de Dados interna no Córtex da IA!
                     }
 
                 } catch (e) {

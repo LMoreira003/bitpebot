@@ -2,6 +2,18 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const { queryOne, execute, queryAll } = require('./database');
 
+// ============================================
+// CONFIGURAÇÃO DAS LOJAS / QUIOSQUES
+// ============================================
+const LOJAS_CONFIG = {
+    'anapolis': { nome: 'Anápolis', instagram: 'https://www.instagram.com/bitpeanapolis/', whatsapp: '556293195634' },
+    'cerrado':  { nome: 'Cerrado',  instagram: 'https://www.instagram.com/bitpe_cerrado/', whatsapp: '556294113866' },
+    'portal':   { nome: 'Portal',   instagram: 'https://www.instagram.com/bitpecalcados/', whatsapp: '556292525532' }
+};
+const INSTAGRAM_PADRAO = 'https://www.instagram.com/bitpecalcados/';
+const WHATSAPP_PADRAO = '556292525532';
+const TIKTOK_PADRAO = 'https://www.tiktok.com/@bitpeoficial';
+
 class WhatsAppBot {
     constructor() {
         this.client = null;
@@ -119,17 +131,30 @@ class WhatsAppBot {
 
             // ============================================
             // COMANDOS ESPECIAIS (antes da IA processar)
+            // Esses comandos NÃO passam pela IA — são hardcoded e instantâneos
             // ============================================
             const textoComando = msg.body.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
             
-            // FIXAR GRUPO DE ANÁPOLIS
-            if (textoComando.includes('fixar anapolis')) {
-                if (msg.from.endsWith('@g.us')) {
-                    execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('grupo_anapolis', ?)", [msg.from]);
+            // FIXAR LOJA (genérico: @bot fixar portal / cerrado / anapolis)
+            const matchFixar = textoComando.match(/fixar\s+(anapolis|cerrado|portal)/);
+            if (matchFixar) {
+                const lojaKey = matchFixar[1];
+                const lojaConfig = LOJAS_CONFIG[lojaKey];
+                if (msg.from.endsWith('@g.us') && lojaConfig) {
+                    // Remove vinculação anterior deste grupo (se tinha)
+                    execute("DELETE FROM lojas WHERE grupo_id = ?", [msg.from]);
+                    // Insere nova vinculação com todos os dados da loja
+                    execute("INSERT INTO lojas (grupo_id, nome, instagram_url, whatsapp_contato) VALUES (?, ?, ?, ?)", 
+                        [msg.from, lojaConfig.nome, lojaConfig.instagram, lojaConfig.whatsapp]);
                     try {
-                        await this.client.sendMessage(msg.from, '✅ *Grupo de Anápolis fixado com sucesso!*\n\nA partir de agora, todas as vendas registradas neste grupo serão vinculadas automaticamente ao Instagram de Anápolis! 📍\n\n📷 *Instagram configurado:* https://www.instagram.com/bitpeanapolis/\n🎵 *TikTok (igual pra todos):* https://www.tiktok.com/@bitpeoficial');
+                        await this.client.sendMessage(msg.from, 
+                            `✅ *Grupo fixado como ${lojaConfig.nome}!*\n\n` +
+                            `📷 *Instagram:* ${lojaConfig.instagram}\n` +
+                            `🎵 *TikTok:* ${TIKTOK_PADRAO}\n` +
+                            `💬 *WhatsApp equipe:* https://wa.me/${lojaConfig.whatsapp}\n\n` +
+                            `A partir de agora, todas as vendas e leads deste grupo serão vinculados à loja *${lojaConfig.nome}*. 📍`);
                     } catch(e) {}
-                } else {
+                } else if (!msg.from.endsWith('@g.us')) {
                     try {
                         await this.client.sendMessage(msg.from, '⚠️ Esse comando só funciona dentro de um grupo!');
                     } catch(e) {}
@@ -137,19 +162,85 @@ class WhatsAppBot {
                 return;
             }
             
-            // DESFIXAR GRUPO DE ANÁPOLIS
-            if (textoComando.includes('desfixar anapolis')) {
-                execute("DELETE FROM config WHERE chave = 'grupo_anapolis'");
+            // DESFIXAR LOJA
+            if (textoComando.includes('desfixar')) {
+                execute("DELETE FROM lojas WHERE grupo_id = ?", [msg.from]);
                 try {
-                    await this.client.sendMessage(msg.from, '🔓 *Grupo de Anápolis desvinculado!*\nAgora nenhum grupo está marcado como Anápolis.');
+                    await this.client.sendMessage(msg.from, '🔓 *Grupo desvinculado!*\nEste grupo não está mais associado a nenhuma loja.');
                 } catch(e) {}
                 return;
             }
+
+            // ============================================
+            // COMANDO SECRETO: ADMIN GERAL
+            // Não passa pela IA, a IA não sabe que isso existe
+            // ============================================
+            if (textoComando.includes('admin geral')) {
+                try {
+                    const totalCompras = queryOne("SELECT COUNT(*) as total FROM compras");
+                    const totalLeads = queryOne("SELECT COUNT(*) as total FROM leads");
+                    const lojas = queryAll("SELECT * FROM lojas");
+                    
+                    let txt = '🔒 *PAINEL ADMINISTRATIVO GERAL*\n\n';
+                    txt += `📊 *TOTAIS GLOBAIS:*\n`;
+                    txt += `✅ Vendas: ${totalCompras ? totalCompras.total : 0}\n`;
+                    txt += `⚠️ Leads: ${totalLeads ? totalLeads.total : 0}\n`;
+                    
+                    // Dados de cada loja registrada
+                    if (lojas.length > 0) {
+                        txt += `\n📍 *LOJAS REGISTRADAS (${lojas.length}):*\n`;
+                        for (const loja of lojas) {
+                            const vendas = queryOne("SELECT COUNT(*) as total FROM compras WHERE loja_origem = ?", [loja.nome.toLowerCase()]);
+                            const leads = queryOne("SELECT COUNT(*) as total FROM leads WHERE loja_origem = ?", [loja.nome.toLowerCase()]);
+                            txt += `\n🏪 *${loja.nome}*\n`;
+                            txt += `   📷 ${loja.instagram_url}\n`;
+                            txt += `   ✅ Vendas: ${vendas ? vendas.total : 0} | ⚠️ Leads: ${leads ? leads.total : 0}\n`;
+                        }
+                    } else {
+                        txt += `\n⚠️ Nenhuma loja fixada ainda.\n`;
+                    }
+                    
+                    // Dados sem loja vinculada
+                    const vendasGeral = queryOne("SELECT COUNT(*) as total FROM compras WHERE loja_origem = 'geral'");
+                    const leadsGeral = queryOne("SELECT COUNT(*) as total FROM leads WHERE loja_origem = 'geral'");
+                    if ((vendasGeral && vendasGeral.total > 0) || (leadsGeral && leadsGeral.total > 0)) {
+                        txt += `\n🏢 *Sem loja vinculada (geral):*\n`;
+                        txt += `   ✅ Vendas: ${vendasGeral ? vendasGeral.total : 0} | ⚠️ Leads: ${leadsGeral ? leadsGeral.total : 0}\n`;
+                    }
+
+                    // Últimas 5 vendas globais
+                    const ultimas = queryAll("SELECT telefone, nome_cliente, produto, numeracao, data_compra, loja_origem FROM compras ORDER BY id DESC LIMIT 5");
+                    if (ultimas.length > 0) {
+                        txt += '\n📦 *ÚLTIMAS 5 VENDAS (GLOBAL):*\n';
+                        for (const c of ultimas) {
+                            txt += `\n👤 *${c.nome_cliente || 'Sem Nome'}* | 📱 ${c.telefone}\n`;
+                            txt += `   👞 ${c.produto} (Nº ${c.numeracao}) | 🏪 ${c.loja_origem || 'geral'}\n`;
+                            txt += `   🕑 ${c.data_compra || 'S/Data'}\n`;
+                        }
+                    }
+
+                    await this.client.sendMessage(msg.from, txt);
+                } catch(e) {
+                    console.error('[ADMIN] Erro no painel geral:', e.message);
+                    try { await this.client.sendMessage(msg.from, '❌ Erro ao gerar painel administrativo.'); } catch(x) {}
+                }
+                return;
+            }
+
+            // ============================================
+            // A PARTIR DAQUI: TUDO PASSA PELA IA
+            // ============================================
 
             console.log(`\n======================================================`);
             console.log(`[TESTE V2] 🔔 GATILHO ACIONADO POR ${msg.from}!`);
             console.log(`[TESTE V2] 📩 MENSAGEM LIDA: "${msg.body}"`);
             console.log(`======================================================`);
+
+            // IDENTIFICA A LOJA DO GRUPO ATUAL (usado em todo o motor)
+            const lojaAtual = queryOne("SELECT * FROM lojas WHERE grupo_id = ?", [msg.from]);
+            const lojaOrigem = lojaAtual ? lojaAtual.nome.toLowerCase() : 'geral';
+            const instagramDaLoja = lojaAtual ? lojaAtual.instagram_url : INSTAGRAM_PADRAO;
+            if (lojaAtual) console.log(`[MOTOR] 📍 Grupo identificado como loja: ${lojaAtual.nome}`);
 
             try {
                 // 2. O SYSTEM PROMPT VERDADEIRO (A LÓGICA DO ARQUITETO)
@@ -210,14 +301,6 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                     if (IA_Decisao.acao === 'salvar_compra' && Array.isArray(IA_Decisao.clientes) && IA_Decisao.clientes.length > 0) {
                         let disparosComSucesso = 0;
                         
-                        // DETECTA SE A VENDA VEIO DO GRUPO DE ANÁPOLIS
-                        const grupoAnapolis = queryOne("SELECT valor FROM config WHERE chave = 'grupo_anapolis'");
-                        const ehAnapolis = grupoAnapolis && grupoAnapolis.valor === msg.from;
-                        const instagramLink = ehAnapolis 
-                            ? 'https://www.instagram.com/bitpeanapolis/' 
-                            : 'https://www.instagram.com/bitpecalcados/';
-                        if (ehAnapolis) console.log('[MOTOR] 📍 Venda detectada no grupo de ANÁPOLIS — usando Instagram local.');
-                        
                         for (const cliente of IA_Decisao.clientes) {
                             if (!cliente.telefone_extraido) continue;
                             const numLimpo = limparNumeroBR(cliente.telefone_extraido);
@@ -228,9 +311,12 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                             const data = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
                             const hora = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
                             
-                            execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
+                            // SALVA COM A LOJA DE ORIGEM
+                            execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra, loja_origem) VALUES (?, ?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora, lojaOrigem]);
                             
-                            const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe da *BitPé Calçados*! 🦶✨\n\nPassando apenas para agradecer imensamente pela sua compra! 💜 Ficamos muito felizes com a sua preferência.\n\n📲 *Siga a gente para ficar por dentro das novidades!*\nPara acompanhar os próximos lançamentos e também garantir nossas promoções, não deixe de seguir nossas redes oficiais:\n\n📷 *Instagram:* ${instagramLink}\n🎵 *TikTok:* https://www.tiktok.com/@bitpeoficial\n\nQualquer dúvida, estaremos sempre à sua disposição. Um abração da equipe!`;
+                            // MENSAGEM DINÂMICA COM INSTAGRAM + WHATSAPP DA LOJA CORRETA
+                            const whatsappDaLoja = lojaAtual ? (lojaAtual.whatsapp_contato || WHATSAPP_PADRAO) : WHATSAPP_PADRAO;
+                            const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe da *BitPé Calçados*! 🦶✨\n\nPassando apenas para agradecer imensamente pela sua compra! 💜 Ficamos muito felizes com a sua preferência.\n\n📲 *Siga a gente para ficar por dentro das novidades!*\nPara acompanhar os próximos lançamentos e também garantir nossas promoções, não deixe de seguir nossas redes oficiais:\n\n📷 *Instagram:* ${instagramDaLoja}\n🎵 *TikTok:* ${TIKTOK_PADRAO}\n\n💬 *Fale com a nossa equipe:* https://wa.me/${whatsappDaLoja}\n\nQualquer dúvida, estaremos sempre à sua disposição. Um abração da equipe!`;
                             
                             try {
                                 const idOficialWhatsapp = await this.client.getNumberId(numLimpo);
@@ -254,8 +340,8 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                             if (!cliente.telefone_extraido) continue;
                             const numLimpo = limparNumeroBR(cliente.telefone_extraido);
                             const prodInfo = cliente.produto || "";
-                            const existe = queryOne("SELECT id FROM leads WHERE telefone = ?", [numLimpo]);
-                            if (!existe) execute("INSERT INTO leads (telefone, observacao_ou_produto) VALUES (?, ?)", [numLimpo, prodInfo]);
+                            const existe = queryOne("SELECT id FROM leads WHERE telefone = ? AND loja_origem = ?", [numLimpo, lojaOrigem]);
+                            if (!existe) execute("INSERT INTO leads (telefone, observacao_ou_produto, loja_origem) VALUES (?, ?, ?)", [numLimpo, prodInfo, lojaOrigem]);
                         }
                     } 
                     else if (IA_Decisao.acao === 'apagar_lead' && Array.isArray(IA_Decisao.clientes)) {
@@ -263,8 +349,9 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                             if (!cliente.telefone_extraido) continue;
                             const numLimpo = limparNumeroBR(cliente.telefone_extraido);
                             const numPuro = numLimpo.replace(/^55/, ''); 
-                            execute("DELETE FROM leads WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
-                            execute("DELETE FROM compras WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
+                            // Apaga só da loja do grupo (ou geral se não tem loja)
+                            execute("DELETE FROM leads WHERE (telefone = ? OR telefone = ? OR telefone LIKE ?) AND loja_origem = ?", [numLimpo, numPuro, `%${numPuro}`, lojaOrigem]);
+                            execute("DELETE FROM compras WHERE (telefone = ? OR telefone = ? OR telefone LIKE ?) AND loja_origem = ?", [numLimpo, numPuro, `%${numPuro}`, lojaOrigem]);
                         }
                     }
                     else if (IA_Decisao.acao === 'bloco_de_notas' && Array.isArray(IA_Decisao.clientes)) {
@@ -273,26 +360,30 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                         }
                     }
                     else if (IA_Decisao.acao === 'contar_leads') {
-                        const countLeads = queryOne("SELECT COUNT(*) as total FROM leads");
-                        const countCompras = queryOne("SELECT COUNT(*) as total FROM compras");
-                        infoMsgParaEnviarDepois = `📊 *MÉTRICAS GERAIS:*\n\n✅ Vendas Concluídas: ${countCompras ? countCompras.total : 0}\n⚠️ Leads de Estoque: ${countLeads ? countLeads.total : 0}`;
+                        // FILTRADO POR LOJA DO GRUPO
+                        const countLeads = queryOne("SELECT COUNT(*) as total FROM leads WHERE loja_origem = ?", [lojaOrigem]);
+                        const countCompras = queryOne("SELECT COUNT(*) as total FROM compras WHERE loja_origem = ?", [lojaOrigem]);
+                        const nomeLoja = lojaAtual ? lojaAtual.nome.toUpperCase() : 'GERAL';
+                        infoMsgParaEnviarDepois = `📊 *MÉTRICAS — ${nomeLoja}:*\n\n✅ Vendas Concluídas: ${countCompras ? countCompras.total : 0}\n⚠️ Leads de Estoque: ${countLeads ? countLeads.total : 0}`;
                     }
                     else if (IA_Decisao.acao === 'listar_dados') {
-                        const ultimasCompras = queryAll("SELECT telefone, nome_cliente, produto, numeracao, data_compra, hora_compra FROM compras ORDER BY id DESC LIMIT 5");
-                        const ultimosLeads = queryAll("SELECT telefone, observacao_ou_produto, created_at FROM leads ORDER BY id DESC LIMIT 5");
+                        // FILTRADO POR LOJA DO GRUPO
+                        const ultimasCompras = queryAll("SELECT telefone, nome_cliente, produto, numeracao, data_compra, hora_compra FROM compras WHERE loja_origem = ? ORDER BY id DESC LIMIT 5", [lojaOrigem]);
+                        const ultimosLeads = queryAll("SELECT telefone, observacao_ou_produto, created_at FROM leads WHERE loja_origem = ? ORDER BY id DESC LIMIT 5", [lojaOrigem]);
                         
-                        let txtListagem = '📋 *ÚLTIMOS REGISTROS NA BASE DE DADOS*\n\n📦 *ÚLTIMAS 5 VENDAS SALVAS:*\n';
+                        const nomeLoja = lojaAtual ? lojaAtual.nome.toUpperCase() : 'GERAL';
+                        let txtListagem = `📋 *REGISTROS — ${nomeLoja}*\n\n📦 *ÚLTIMAS 5 VENDAS:*\n`;
                         ultimasCompras.forEach(c => {
                             txtListagem += '\n👤 *' + (c.nome_cliente || 'Cliente Sem Nome') + '*\n📱 Tel: ' + c.telefone + '\n👞 Produto: ' + c.produto + ' (Nº ' + c.numeracao + ')\n🕑 Ref: ' + (c.data_compra || 'S/Data') + ' às ' + (c.hora_compra || 'S/Hora') + '\n';
                         });
-                        if (ultimasCompras.length === 0) txtListagem += '\nNenhuma compra recente.\n';
+                        if (ultimasCompras.length === 0) txtListagem += '\nNenhuma venda registrada ainda.\n';
 
                         txtListagem += '\n⚠️ *ÚLTIMOS 5 LEADS (Sem Estoque):*\n';
                         ultimosLeads.forEach(l => {
                             let data_lead = l.created_at ? l.created_at.split(' ')[0].split('-').reverse().join('/') : 'Hoje';
                             txtListagem += '\n👤 Tel: ' + l.telefone + '\n👞 Falta: ' + l.observacao_ou_produto + '\n🕑 Ref: ' + data_lead + '\n';
                         });
-                        if (ultimosLeads.length === 0) txtListagem += '\nNenhum lead de falta recente.';
+                        if (ultimosLeads.length === 0) txtListagem += '\nNenhum lead registrado ainda.';
 
                         infoMsgParaEnviarDepois = txtListagem;
                     }

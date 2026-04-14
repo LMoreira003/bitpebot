@@ -50,6 +50,7 @@ async function initDB() {
             data_compra TEXT NOT NULL,
             hora_compra TEXT NOT NULL,
             valor TEXT DEFAULT '',
+            loja_origem TEXT DEFAULT 'geral',
             status_mensagem TEXT DEFAULT 'pendente',
             data_envio TEXT DEFAULT NULL,
             erro_envio TEXT DEFAULT NULL,
@@ -62,6 +63,7 @@ async function initDB() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telefone TEXT NOT NULL,
             observacao_ou_produto TEXT DEFAULT '',
+            loja_origem TEXT DEFAULT 'geral',
             status_mensagem TEXT DEFAULT 'pendente',
             created_at TEXT DEFAULT (datetime('now', 'localtime'))
         )
@@ -88,6 +90,21 @@ async function initDB() {
             adicionado_em TEXT DEFAULT (datetime('now', 'localtime'))
         )
     `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS lojas (
+            grupo_id TEXT PRIMARY KEY,
+            nome TEXT NOT NULL,
+            instagram_url TEXT NOT NULL,
+            whatsapp_contato TEXT DEFAULT '',
+            adicionado_em TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    `);
+
+    // Migração: adiciona colunas novas se o banco já existia sem elas
+    try { db.run("ALTER TABLE compras ADD COLUMN loja_origem TEXT DEFAULT 'geral'"); } catch(e) {}
+    try { db.run("ALTER TABLE leads ADD COLUMN loja_origem TEXT DEFAULT 'geral'"); } catch(e) {}
+    try { db.run("ALTER TABLE lojas ADD COLUMN whatsapp_contato TEXT DEFAULT ''"); } catch(e) {}
 
     // Insere configurações padrão se não existirem
     const defaults = [

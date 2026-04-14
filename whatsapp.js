@@ -1,6 +1,6 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
-const { queryOne, execute } = require('./database');
+const { queryOne, execute, queryAll } = require('./database');
 
 class WhatsAppBot {
     constructor() {

@@ -116,26 +116,28 @@ class WhatsAppBot {
 Seu objetivo é ler as solicitações dos funcionários para gerenciar clientes. Você agora recebe o "Contexto Recente" da conversa para lembrar do que estavam falando.
 
 REGRAS:
-1. VENDA: Se falaram que o cliente COMPROU (ex: "bot Lucas 629.. comprou babuche 41"), extraia TUDO! Ação: "salvar_compra".
-2. FALTA/LEAD: Se pedirem pra salvar pq NÃO TINHA (ex: "bot n tinha bota 39 629.."), a ação: "salvar_lead".
+1. VENDA: Se falarem que um ou MAIS clientes COMPRARAM (ex: "bot Lucas 629.. comprou babuche 41 e Maria 62... comprou salto"), extraia os dados de TODOS! Ação: "salvar_compra".
+2. FALTA/LEAD: Se pedirem pra salvar um ou VÁRIOS contatos pq NÃO TINHA, a ação: "salvar_lead".
 3. APAGAR: Para EXCLUIR um cliente ou número, ache o número no seu [CONTEXTO RECENTE] e retorne a ação "apagar_lead".
 4. ESTATÍSTICA: Se perguntarem "Quantos numeros tem salvos?", responda que vai olhar as métricas. Ação "contar_leads".
 5. LISTAR DADOS: Se falarem "mostre os dados", "mostre quem vc salvou" ou "liste os numeros", responda que vai gerar o arquivo. Ação "listar_dados".
-6. ENSINAR USO: Se perguntarem "o que vc faz", "como te usar" ou mandarem mais de 1 número em uma única frase: diga à equipe que gerará um manual. Ação "explicar_uso".
+6. ENSINAR USO: Se perguntarem "o que vc faz", ou "como te usar": diga à equipe que gerará um manual. Ação "explicar_uso".
 7. LIXO: Mensagens indecifráveis geram ação "bloco_de_notas".
 
-OBSERVAÇÃO DA RESPOSTA: Você deve ser natural e cirúrgico. Sepeare as informações para salvar. No "telefone_extraido" você processa e aceita apenas UM número por vez.
-Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em volta:
+OBSERVAÇÃO DA RESPOSTA: Você deve ser natural e cirúrgico. Separe as informações para salvar. Se houver vários clientes, adicione TODOS na lista JSON.
+Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a array 'clientes':
 {
   "acao": "salvar_compra" ou "salvar_lead" ou "apagar_lead" ou "contar_leads" ou "listar_dados" ou "explicar_uso" ou "bloco_de_notas" ou "nenhuma_acao",
   "mensagem_para_grupo": "Sua resposta curta com emojis comunicando pro grupo a decisão.",
-  "detalhes": {
-    "telefone_extraido": "6299999999 se houver",
-    "nome_cliente": "Nome do cliente se foi falado na frase (ex: Lucas)",
-    "produto": "Apenas o nome do calçado (ex: Babuche Homem Aranha)",
-    "numeracao": "Apenas o número do calçado (ex: 41)",
-    "anotacao_stranha": "bizarrice para o bloco de notas"
-  }
+  "clientes": [
+    {
+      "telefone_extraido": "6299999999 se houver",
+      "nome_cliente": "Nome do cliente se foi falado na frase (ex: Lucas)",
+      "produto": "Apenas o nome do calçado (ex: Babuche Homem Aranha)",
+      "numeracao": "Apenas o número do calçado (ex: 41)",
+      "anotacao_stranha": "bizarrice para o bloco de notas"
+    }
+  ]
 }`;
 
                 // Adicionando Memória de Curto Prazo (últimas 6 mensagens do grupo)
@@ -164,52 +166,61 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
 
                     let infoMsgParaEnviarDepois = null;
 
-                    if (IA_Decisao.acao === 'salvar_compra' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
-                        const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
-                        const nomeInfo = IA_Decisao.detalhes.nome_cliente || "";
-                        const prodInfo = IA_Decisao.detalhes.produto || "seu calçado";
-                        const numInfo = IA_Decisao.detalhes.numeracao || "";
-                        
-                        const data = new Date().toLocaleDateString('pt-BR');
-                        const hora = new Date().toLocaleTimeString('pt-BR');
-                        
-                        // Salva com todas as gavetas preenchidas perfeitamente
-                        execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
-                        
-                        // PV limpo e agradável
-                        const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe da *BitPé Calçados*! 🦶✨\n\nPassando apenas para agradecer imensamente pela sua compra! 💜 Ficamos muito felizes com a sua preferência.\n\n📲 *Siga a gente para ficar por dentro das novidades!*\nPara acompanhar os próximos lançamentos e também garantir nossas promoções, não deixe de seguir nossas redes oficiais:\n\n📷 *Instagram:* https://www.instagram.com/bitpecalcados/\n🎵 *TikTok:* https://www.tiktok.com/@bitpeoficial\n\nQualquer dúvida, estaremos sempre à sua disposição. Um abração da equipe!`;
-                        
-                        try {
-                            const idOficialWhatsapp = await this.client.getNumberId(numLimpo);
-                            if (idOficialWhatsapp) {
-                                await this.client.sendMessage(idOficialWhatsapp._serialized, wppAgradece);
-                                // Nova Solitação do Chefe: Avisar o grupo que o PV funcionou em uma 2ª mensagem
-                                infoMsgParaEnviarDepois = `✅ *Notificação do Módulo de Disparo:*\nSalvei o número (${numLimpo}) com sucesso e já enviei a mensagem de agradecimento pelo Whatsapp no PV desse cliente! 🚀`;
-                            } else {
-                                console.error(`[MOTOR] ⚠️ O WhatsApp rejeitou a formatação.`);
+                    if (IA_Decisao.acao === 'salvar_compra' && Array.isArray(IA_Decisao.clientes) && IA_Decisao.clientes.length > 0) {
+                        let disparosComSucesso = 0;
+                        for (const cliente of IA_Decisao.clientes) {
+                            if (!cliente.telefone_extraido) continue;
+                            const numLimpo = limparNumeroBR(cliente.telefone_extraido);
+                            const nomeInfo = cliente.nome_cliente || "";
+                            const prodInfo = cliente.produto || "seu calçado";
+                            const numInfo = cliente.numeracao || "";
+                            
+                            const data = new Date().toLocaleDateString('pt-BR');
+                            const hora = new Date().toLocaleTimeString('pt-BR');
+                            
+                            execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
+                            
+                            const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe da *BitPé Calçados*! 🦶✨\n\nPassando apenas para agradecer imensamente pela sua compra! 💜 Ficamos muito felizes com a sua preferência.\n\n📲 *Siga a gente para ficar por dentro das novidades!*\nPara acompanhar os próximos lançamentos e também garantir nossas promoções, não deixe de seguir nossas redes oficiais:\n\n📷 *Instagram:* https://www.instagram.com/bitpecalcados/\n🎵 *TikTok:* https://www.tiktok.com/@bitpeoficial\n\nQualquer dúvida, estaremos sempre à sua disposição. Um abração da equipe!`;
+                            
+                            try {
+                                const idOficialWhatsapp = await this.client.getNumberId(numLimpo);
+                                if (idOficialWhatsapp) {
+                                    await this.client.sendMessage(idOficialWhatsapp._serialized, wppAgradece);
+                                    disparosComSucesso++;
+                                }
+                            } catch (e) {
+                                console.error(`[MOTOR] ❌ PV falhou para ${numLimpo}:`, e.message);
                             }
-                        } catch (e) {
-                            console.error(`[MOTOR] ❌ PV falhou:`, e.message);
+                        }
+                        
+                        if (disparosComSucesso > 0) {
+                            infoMsgParaEnviarDepois = `✅ *Notificação do Módulo de Disparo:*\nSalvei os dados no Banco e enviei a mensagem de Boas Vindas com sucesso no PV de ${disparosComSucesso} cliente(s)! 🚀`;
+                        } else {
+                            infoMsgParaEnviarDepois = `⚠️ *Notificação:*\nOs clientes foram salvos no Banco de Dados, porém falhamos ao tentar enviar mensagem no PV deles no momento.`;
                         }
                     }
-                    else if (IA_Decisao.acao === 'salvar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
-                        const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
-                        const prodInfo = IA_Decisao.detalhes.produto || "";
-                        const existe = queryOne("SELECT id FROM leads WHERE telefone = ?", [numLimpo]);
-                        if (!existe) {
-                            execute("INSERT INTO leads (telefone, observacao_ou_produto) VALUES (?, ?)", [numLimpo, prodInfo]);
+                    else if (IA_Decisao.acao === 'salvar_lead' && Array.isArray(IA_Decisao.clientes)) {
+                        for (const cliente of IA_Decisao.clientes) {
+                            if (!cliente.telefone_extraido) continue;
+                            const numLimpo = limparNumeroBR(cliente.telefone_extraido);
+                            const prodInfo = cliente.produto || "";
+                            const existe = queryOne("SELECT id FROM leads WHERE telefone = ?", [numLimpo]);
+                            if (!existe) execute("INSERT INTO leads (telefone, observacao_ou_produto) VALUES (?, ?)", [numLimpo, prodInfo]);
                         }
                     } 
-                    else if (IA_Decisao.acao === 'apagar_lead' && IA_Decisao.detalhes && IA_Decisao.detalhes.telefone_extraido) {
-                        const numLimpo = limparNumeroBR(IA_Decisao.detalhes.telefone_extraido);
-                        const numPuro = numLimpo.replace(/^55/, ''); // Cria uma versão sem o 55
-                        
-                        // Passamos o rodo em qualquer variação do número salvo na base
-                        execute("DELETE FROM leads WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
-                        execute("DELETE FROM compras WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
+                    else if (IA_Decisao.acao === 'apagar_lead' && Array.isArray(IA_Decisao.clientes)) {
+                        for (const cliente of IA_Decisao.clientes) {
+                            if (!cliente.telefone_extraido) continue;
+                            const numLimpo = limparNumeroBR(cliente.telefone_extraido);
+                            const numPuro = numLimpo.replace(/^55/, ''); 
+                            execute("DELETE FROM leads WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
+                            execute("DELETE FROM compras WHERE telefone = ? OR telefone = ? OR telefone LIKE ?", [numLimpo, numPuro, `%${numPuro}`]);
+                        }
                     }
-                    else if (IA_Decisao.acao === 'bloco_de_notas' && IA_Decisao.detalhes && IA_Decisao.detalhes.anotacao_stranha) {
-                        execute("INSERT INTO bloco_notas (anotacao) VALUES (?)", [IA_Decisao.detalhes.anotacao_stranha]);
+                    else if (IA_Decisao.acao === 'bloco_de_notas' && Array.isArray(IA_Decisao.clientes)) {
+                        for (const cliente of IA_Decisao.clientes) {
+                            if (cliente.anotacao_stranha) execute("INSERT INTO bloco_notas (anotacao) VALUES (?)", [cliente.anotacao_stranha]);
+                        }
                     }
                     else if (IA_Decisao.acao === 'contar_leads') {
                         const countLeads = queryOne("SELECT COUNT(*) as total FROM leads");
@@ -244,7 +255,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         infoMsgParaEnviarDepois = txtListagem;
                     }
                     else if (IA_Decisao.acao === 'explicar_uso') {
-                        infoMsgParaEnviarDepois = `🤖 *COMO TRABALHAR COMIGO (MANUAL RÁPIDO):*\n\n1️⃣ Sempre escreva a palavra *@bot* na mensagem para eu acordar.\n2️⃣ Me envie apenas **UM número de contato de cada vez**.\n3️⃣ Sempre informe na mesma frase o: *Nome do Cliente, o Produto, a Numeração e o Celular dele*. \n\n*Exemplo:* @bot, Maria comprou o tênis 35. Cel dela 62 9...\n\n4️⃣ *Aviso Importante:* Eu não consigo ouvir áudios e nem entender imagens ainda. Preciso que a equipe apenas digite as informações em texto! 😉`;
+                        infoMsgParaEnviarDepois = `🤖 *COMO TRABALHAR COMIGO (MANUAL RÁPIDO):*\n\n1️⃣ Sempre escreva a palavra *@bot* na mensagem para eu acordar.\n2️⃣ Pode me enviar **VÁRIOS clientes em uma tacada só** se quiser, eu destrincho e organizo!\n3️⃣ Procure informar: *Nome do Cliente, Produto, Numeração e Celular*. \n\n*Exemplo:* @bot, Maria comprou tênis 35 Cel: 62 9.. e João comprou bota 40 Cel: 62 9...\n\n4️⃣ *Aviso Importante:* Eu não consigo ouvir áudios e nem entender imagens ainda. Preciso que a equipe digite as informações! 😉`;
                     }
 
                     // 1. O Bot envia a resposta natural no grupo primeiro

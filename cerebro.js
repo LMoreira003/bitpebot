@@ -12,21 +12,25 @@ class CerebroAI {
                 const envTexto = fs.readFileSync(envPath, 'utf8');
                 const match = envTexto.match(/GEMINI_KEYS="([^"]+)"/);
                 if (match) keysString = match[1];
-                const matchGroq = envTexto.match(/GROQ_KEY="([^"]+)"/);
-                if (matchGroq) groqKey = matchGroq[1];
+                // Suporte a múltiplas chaves Groq (GROQ_KEYS) ou chave única (GROQ_KEY)
+                const matchGroqMulti = envTexto.match(/GROQ_KEYS="([^"]+)"/);
+                const matchGroqSingle = envTexto.match(/GROQ_KEY="([^"]+)"/);
+                if (matchGroqMulti) groqKey = matchGroqMulti[1];
+                else if (matchGroqSingle) groqKey = matchGroqSingle[1];
             } else {
                 console.log("[CÉREBRO GOOGLE] ⚠️ Arquivo .env não achado, vou tentar usar variável de sistema.");
                 keysString = process.env.GEMINI_KEYS || "";
-                groqKey = process.env.GROQ_KEY || "";
+                groqKey = process.env.GROQ_KEYS || process.env.GROQ_KEY || "";
             }
         } catch (e) { }
 
         this.keys = keysString.split(',').map(k => k.trim()).filter(k => k.length > 5);
-        this.groqKey = groqKey;
+        this.groqKeys = groqKey.split(',').map(k => k.trim()).filter(k => k.length > 5);
+        this.indiceGroqAtual = 0;
         
         // Os modelos do futuro que você confia (Deixamos APENAS o rei da velocidade que não restringe cota grátis)
         this.modelos = [
-            'gemini-3-flash-preview'
+            'gemini-2.0-flash'
         ];
         
         // SISTEMA DE FILA (MUTEX / FUNIL DOURADO)
@@ -36,7 +40,7 @@ class CerebroAI {
         // CATRACA DE CHAVES (Desgaste uniforme)
         this.indiceChaveAtual = 0;
 
-        if (this.groqKey) console.log('[CÉREBRO] 🛡️ Fallback Groq carregado com sucesso!');
+        if (this.groqKeys.length > 0) console.log(`[CÉREBRO] 🛡️ Fallback Groq carregado com ${this.groqKeys.length} chave(s)!`);
     }
 
     async pensar(prompt, system_prompt = "Você é um bot assistente de uma loja chamada BitPé.") {
@@ -128,13 +132,22 @@ class CerebroAI {
         }
         
         // Se a API torrar todas as 5 chances dele, ativa o FALLBACK GROQ
-        if (this.groqKey) {
+        if (this.groqKeys.length > 0) {
             console.log('[CÉREBRO] 🛡️ Gemini esgotado! Ativando fallback Groq...');
-            try {
-                const resultado = await this._fallbackGroq(prompt, system_prompt);
-                if (resultado) return resultado;
-            } catch (groqErr) {
-                console.error('[CÉREBRO GROQ] ❌ Fallback também falhou:', groqErr.message);
+            // Tenta todas as chaves Groq em rodízio
+            for (let g = 0; g < this.groqKeys.length; g++) {
+                const groqIdx = (this.indiceGroqAtual + g) % this.groqKeys.length;
+                const groqChave = this.groqKeys[groqIdx];
+                try {
+                    const resultado = await this._fallbackGroq(prompt, system_prompt, groqChave);
+                    if (resultado) {
+                        this.indiceGroqAtual = (groqIdx + 1) % this.groqKeys.length;
+                        return resultado;
+                    }
+                } catch (groqErr) {
+                    console.error(`[CÉREBRO GROQ] ❌ Chave *${groqChave.slice(-5)} falhou:`, groqErr.message);
+                    await new Promise(r => setTimeout(r, 1000));
+                }
             }
         }
 
@@ -143,12 +156,13 @@ class CerebroAI {
     }
 
     // MOTOR DE FALLBACK: Groq (gpt-oss-120b)
-    async _fallbackGroq(prompt, system_prompt) {
+    async _fallbackGroq(prompt, system_prompt, chave) {
+        console.log(`[CÉREBRO GROQ] 📡 Tentando chave *${chave.slice(-5)}...`);
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.groqKey}`
+                'Authorization': `Bearer ${chave}`
             },
             body: JSON.stringify({
                 model: 'openai/gpt-oss-120b',

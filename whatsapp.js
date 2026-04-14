@@ -177,7 +177,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
                         
                         // PV limpo e agradável
-                        const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe *BitPé Calçados*! 🦶✨\n\nMuito obrigado pela sua compra de um maravilhoso ${prodInfo}! 💜 Ficamos imensamente felizes pela sua preferência.\n\n🎁 *QUER 10% DE DESCONTO na próxima compra?*\nÉ só postar uma foto marcando a gente lá no nosso Instagram: https://instagram.com/bitpecalcados\n\nAbraços!`;
+                        const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe da *BitPé Calçados*! 🦶✨\n\nPassando apenas para agradecer imensamente pela sua compra! 💜 Ficamos muito felizes com a sua preferência.\n\n📲 *Siga a gente para ficar por dentro das novidades!*\nPara acompanhar os próximos lançamentos e também garantir nossas promoções, não deixe de seguir nossas redes oficiais:\n\n📷 *Instagram:* https://www.instagram.com/bitpecalcados/\n🎵 *TikTok:* https://www.tiktok.com/@bitpeoficial\n\nQualquer dúvida, estaremos sempre à sua disposição. Um abração da equipe!`;
                         
                         try {
                             const idOficialWhatsapp = await this.client.getNumberId(numLimpo);
@@ -229,7 +229,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo, sem texto extra em vol
                         infoMsgParaEnviarDepois = txtListagem;
                     }
                     else if (IA_Decisao.acao === 'explicar_uso') {
-                        infoMsgParaEnviarDepois = `🤖 *COMO TRABALHAR COMIGO (MANUAL RÁPIDO):*\n\n1️⃣ Sempre escreva a palavra *@bot* na mensagem para eu acordar.\n2️⃣ Me envie apenas **UM número de contato de cada vez**.\n3️⃣ Sempre informe na mesam frase o: *Nome do Cliente, o Produto, a Numeração e o Celular dele*. \n\n*Exemplo:* @bot, Maria comprou o tênis 35. Cel dela 62 9...\n\n4️⃣ *Aviso Importante:* Eu sou um Bot de Dados escrito em Node, eu **não ouço áudios e nem enxergo imagens**. Preciso que a equipe digite as informações! 😉`;
+                        infoMsgParaEnviarDepois = `🤖 *COMO TRABALHAR COMIGO (MANUAL RÁPIDO):*\n\n1️⃣ Sempre escreva a palavra *@bot* na mensagem para eu acordar.\n2️⃣ Me envie apenas **UM número de contato de cada vez**.\n3️⃣ Sempre informe na mesma frase o: *Nome do Cliente, o Produto, a Numeração e o Celular dele*. \n\n*Exemplo:* @bot, Maria comprou o tênis 35. Cel dela 62 9...\n\n4️⃣ *Aviso Importante:* Eu não consigo ouvir áudios e nem entender imagens ainda. Preciso que a equipe apenas digite as informações em texto! 😉`;
                     }
 
                     // 1. O Bot envia a resposta natural no grupo primeiro

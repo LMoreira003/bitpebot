@@ -5,19 +5,24 @@ class CerebroAI {
     constructor() {
         // Chaves protegidas! Ele vai ler fisicamente o texto do arquivo .env que sua tela da AWS criou.
         let keysString = "";
+        let groqKey = "";
         try {
             const envPath = path.join(__dirname, '.env');
             if (fs.existsSync(envPath)) {
                 const envTexto = fs.readFileSync(envPath, 'utf8');
                 const match = envTexto.match(/GEMINI_KEYS="([^"]+)"/);
                 if (match) keysString = match[1];
+                const matchGroq = envTexto.match(/GROQ_KEY="([^"]+)"/);
+                if (matchGroq) groqKey = matchGroq[1];
             } else {
                 console.log("[CÉREBRO GOOGLE] ⚠️ Arquivo .env não achado, vou tentar usar variável de sistema.");
                 keysString = process.env.GEMINI_KEYS || "";
+                groqKey = process.env.GROQ_KEY || "";
             }
         } catch (e) { }
 
         this.keys = keysString.split(',').map(k => k.trim()).filter(k => k.length > 5);
+        this.groqKey = groqKey;
         
         // Os modelos do futuro que você confia (Deixamos APENAS o rei da velocidade que não restringe cota grátis)
         this.modelos = [
@@ -30,6 +35,8 @@ class CerebroAI {
         
         // CATRACA DE CHAVES (Desgaste uniforme)
         this.indiceChaveAtual = 0;
+
+        if (this.groqKey) console.log('[CÉREBRO] 🛡️ Fallback Groq carregado com sucesso!');
     }
 
     async pensar(prompt, system_prompt = "Você é um bot assistente de uma loja chamada BitPé.") {
@@ -120,8 +127,57 @@ class CerebroAI {
             }
         }
         
-        // Se a API torrar todas as 5 chances dele
-        return JSON.stringify({ mensagem_para_grupo: "Minha conexão com a Mente-Mestra falhou! Tente daqui a pouco.", acao: "nenhuma_acao" });
+        // Se a API torrar todas as 5 chances dele, ativa o FALLBACK GROQ
+        if (this.groqKey) {
+            console.log('[CÉREBRO] 🛡️ Gemini esgotado! Ativando fallback Groq...');
+            try {
+                const resultado = await this._fallbackGroq(prompt, system_prompt);
+                if (resultado) return resultado;
+            } catch (groqErr) {
+                console.error('[CÉREBRO GROQ] ❌ Fallback também falhou:', groqErr.message);
+            }
+        }
+
+        // Se tudo falhou (Gemini + Groq)
+        return JSON.stringify({ mensagem_para_grupo: "Minha conexão com a Mente-Mestra falhou! Tente daqui a pouco.", acao: "nenhuma_acao", clientes: [] });
+    }
+
+    // MOTOR DE FALLBACK: Groq (gpt-oss-120b)
+    async _fallbackGroq(prompt, system_prompt) {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.groqKey}`
+            },
+            body: JSON.stringify({
+                model: 'openai/gpt-oss-120b',
+                messages: [
+                    { role: 'system', content: system_prompt },
+                    { role: 'user', content: prompt }
+                ],
+                max_tokens: 1024,
+                temperature: 0.3
+            })
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`Groq Status ${response.status} -> ${errText}`);
+        }
+
+        const data = await response.json();
+        const msg = data.choices?.[0]?.message;
+        if (!msg) throw new Error('Groq retornou resposta vazia');
+
+        // gpt-oss-120b pode colocar a resposta em 'content' ou 'reasoning'
+        let respostaLimpa = (msg.content || msg.reasoning || '').trim();
+        respostaLimpa = respostaLimpa.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        if (!respostaLimpa) throw new Error('Groq retornou texto vazio');
+
+        console.log('[CÉREBRO GROQ] ✅ Fallback respondeu com sucesso!');
+        return respostaLimpa;
     }
 }
 

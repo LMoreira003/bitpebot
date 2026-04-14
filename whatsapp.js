@@ -21,13 +21,16 @@ class WhatsAppBot {
             }),
             puppeteer: {
                 headless: true,
+                protocolTimeout: 120000, // 2 minutos para a máquina de 1GB RAM não engasgar
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
-                    '--disable-gpu'
+                    '--disable-gpu',
+                    '--single-process',
+                    '--no-zygote'
                 ]
             }
         });
@@ -55,14 +58,18 @@ class WhatsAppBot {
             this.info = this.client.info;
             console.log('[BOT] Número:', this.info?.wid?.user || 'desconhecido');
             
+            // Aguarda 5s pro Chrome estabilizar antes de tentar enviar qualquer coisa
+            await new Promise(r => setTimeout(r, 5000));
             try {
-                // Ao ligar o servidor, ele busca a gaveta do grupo e avisa que voltou a vida!
                 const grupoSalvo = queryOne("SELECT valor FROM config WHERE chave = 'grupo_oficial'");
                 if (grupoSalvo && grupoSalvo.valor) {
                     await this.client.sendMessage(grupoSalvo.valor, "🤖 *SISTEMA REINICIADO*\nFui atualizado e estou 100% online novamente! ✅");
+                    console.log('[BOT] ✅ Mensagem de reinicialização enviada ao grupo.');
+                } else {
+                    console.log('[BOT] Nenhum grupo oficial salvo ainda.');
                 }
             } catch (e) {
-                console.log("[BOT] Sem grupo oficial salvo ainda para anunciar startup.");
+                console.log('[BOT] ⚠️ Não conseguiu enviar aviso de reinicialização:', e.message);
             }
         });
 
@@ -259,25 +266,32 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                     }
 
                     // 1. O Bot envia a resposta natural no grupo primeiro
-                    if (IA_Decisao.mensagem_para_grupo) {
-                        await msg.reply(IA_Decisao.mensagem_para_grupo);
-                        this.memoriaConversa.push(IA_Decisao.mensagem_para_grupo); // Grava o que ele disse tbm!
-                    } else {
-                        await msg.reply('Entendido.');
+                    try {
+                        if (IA_Decisao.mensagem_para_grupo) {
+                            await this.client.sendMessage(msg.from, IA_Decisao.mensagem_para_grupo);
+                            this.memoriaConversa.push(IA_Decisao.mensagem_para_grupo);
+                        }
+                    } catch (envioErr) {
+                        console.error('[MOTOR] ⚠️ Falha ao enviar resposta da IA no grupo:', envioErr.message);
                     }
                     
                     // 2. O Node.js envia os dados Puros logo em seguida
                     if (infoMsgParaEnviarDepois) {
-                        await new Promise(resolve => setTimeout(resolve, 3000));
-                        await this.client.sendMessage(msg.from, infoMsgParaEnviarDepois);
-                        this.memoriaConversa.push(infoMsgParaEnviarDepois); // Carimba a Tabela de Dados interna no Córtex da IA!
+                        try {
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+                            await this.client.sendMessage(msg.from, infoMsgParaEnviarDepois);
+                            this.memoriaConversa.push(infoMsgParaEnviarDepois);
+                        } catch (envioErr2) {
+                            console.error('[MOTOR] ⚠️ Falha ao enviar dados complementares:', envioErr2.message);
+                        }
                     }
 
                 } catch (e) {
-                    await msg.reply('Ops, tive um pequeno solavanco interno aqui!');
+                    console.error('[MOTOR] ❌ Erro interno do Motor:', e.message);
+                    try { await this.client.sendMessage(msg.from, 'Ops, tive um pequeno solavanco interno!'); } catch(x) {}
                 }
             } catch (erro) {
-                console.error("[WHATSAPP] O Cérebro deu tela azul:", erro);
+                console.error('[WHATSAPP] O Cérebro deu tela azul:', erro.message);
             }
         });
         // ============================================

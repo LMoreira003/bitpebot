@@ -21,16 +21,14 @@ class WhatsAppBot {
             }),
             puppeteer: {
                 headless: true,
-                protocolTimeout: 120000, // 2 minutos para a máquina de 1GB RAM não engasgar
+                protocolTimeout: 120000,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
                     '--disable-accelerated-2d-canvas',
                     '--no-first-run',
-                    '--disable-gpu',
-                    '--single-process',
-                    '--no-zygote'
+                    '--disable-gpu'
                 ]
             }
         });

@@ -235,29 +235,21 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                         infoMsgParaEnviarDepois = `📊 *MÉTRICAS GERAIS:*\n\n✅ Vendas Concluídas: ${countCompras ? countCompras.total : 0}\n⚠️ Leads de Estoque: ${countLeads ? countLeads.total : 0}`;
                     }
                     else if (IA_Decisao.acao === 'listar_dados') {
-                        // Busca no SQlite de trás pra frente pros mais novos surgirem e recorta em 5 cada
                         const ultimasCompras = queryAll("SELECT telefone, nome_cliente, produto, numeracao, data_compra, hora_compra FROM compras ORDER BY id DESC LIMIT 5");
                         const ultimosLeads = queryAll("SELECT telefone, observacao_ou_produto, created_at FROM leads ORDER BY id DESC LIMIT 5");
                         
-                        let txtListagem = `📋 *ÚLTIMOS REGISTROS NA BASE DE DADOS*\n`;
-                        txtListagem += `\n📦 *ÚLTIMAS 5 VENDAS SALVAS:*\n`;
+                        let txtListagem = '📋 *ÚLTIMOS REGISTROS NA BASE DE DADOS*\n\n📦 *ÚLTIMAS 5 VENDAS SALVAS:*\n';
                         ultimasCompras.forEach(c => {
-                            txtListagem += `\n👤 *${c.nome_cliente || 'Cliente Sem Nome'}*
-📱 Tel: ${c.telefone}
-👞 Produto: ${c.produto} (Nº ${c.numeracao})
-🕑 Ref: ${c.data_compra || 'S/Data'} às ${c.hora_compra || 'S/Hora'}\n`;
+                            txtListagem += '\n👤 *' + (c.nome_cliente || 'Cliente Sem Nome') + '*\n📱 Tel: ' + c.telefone + '\n👞 Produto: ' + c.produto + ' (Nº ' + c.numeracao + ')\n🕑 Ref: ' + (c.data_compra || 'S/Data') + ' às ' + (c.hora_compra || 'S/Hora') + '\n';
                         });
-                        if (ultimasCompras.length === 0) txtListagem += `\nNenhuma compra recente.\n`;
+                        if (ultimasCompras.length === 0) txtListagem += '\nNenhuma compra recente.\n';
 
-                        txtListagem += `\n⚠️ *ÚLTIMOS 5 LEADS (Sem Estoque):*\n`;
+                        txtListagem += '\n⚠️ *ÚLTIMOS 5 LEADS (Sem Estoque):*\n';
                         ultimosLeads.forEach(l => {
-                            // Extrai só a data, ou exibe "Hoje" se por algum motivo for nulo o created_at
                             let data_lead = l.created_at ? l.created_at.split(' ')[0].split('-').reverse().join('/') : 'Hoje';
-                            txtListagem += `\n👤 Tel: ${l.telefone}
-👞 Falta: ${l.observacao_ou_produto}
-🕑 Ref: ${data_lead}\n`;
+                            txtListagem += '\n👤 Tel: ' + l.telefone + '\n👞 Falta: ' + l.observacao_ou_produto + '\n🕑 Ref: ' + data_lead + '\n';
                         });
-                        if (ultimosLeads.length === 0) txtListagem += `\nNenhum lead de falta recente.`;
+                        if (ultimosLeads.length === 0) txtListagem += '\nNenhum lead de falta recente.';
 
                         infoMsgParaEnviarDepois = txtListagem;
                     }

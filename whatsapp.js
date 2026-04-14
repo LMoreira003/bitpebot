@@ -146,6 +146,7 @@ class WhatsAppBot {
                     // Insere nova vinculação com todos os dados da loja
                     execute("INSERT INTO lojas (grupo_id, nome, instagram_url, whatsapp_contato) VALUES (?, ?, ?, ?)", 
                         [msg.from, lojaConfig.nome, lojaConfig.instagram, lojaConfig.whatsapp]);
+                    console.log(`[LOJAS] ✅ GRUPO FIXADO → ${lojaConfig.nome} | Grupo: ${msg.from} | Insta: ${lojaConfig.instagram} | WhatsApp: ${lojaConfig.whatsapp}`);
                     try {
                         await this.client.sendMessage(msg.from, 
                             `✅ *Grupo fixado como ${lojaConfig.nome}!*\n\n` +
@@ -164,6 +165,7 @@ class WhatsAppBot {
             
             // DESFIXAR LOJA
             if (textoComando.includes('desfixar')) {
+                console.log(`[LOJAS] 🔓 GRUPO DESVINCULADO | Grupo: ${msg.from}`);
                 execute("DELETE FROM lojas WHERE grupo_id = ?", [msg.from]);
                 try {
                     await this.client.sendMessage(msg.from, '🔓 *Grupo desvinculado!*\nEste grupo não está mais associado a nenhuma loja.');

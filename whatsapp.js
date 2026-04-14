@@ -59,12 +59,19 @@ class WhatsAppBot {
             // Aguarda 5s pro Chrome estabilizar antes de tentar enviar qualquer coisa
             await new Promise(r => setTimeout(r, 5000));
             try {
-                const grupoSalvo = queryOne("SELECT valor FROM config WHERE chave = 'grupo_oficial'");
-                if (grupoSalvo && grupoSalvo.valor) {
-                    await this.client.sendMessage(grupoSalvo.valor, "🤖 *SISTEMA REINICIADO*\nFui atualizado e estou 100% online novamente! ✅");
-                    console.log('[BOT] ✅ Mensagem de reinicialização enviada ao grupo.');
+                const grupos = queryAll("SELECT grupo_id FROM grupos_ativos");
+                if (grupos.length > 0) {
+                    for (const grupo of grupos) {
+                        try {
+                            await this.client.sendMessage(grupo.grupo_id, "🤖 *SISTEMA REINICIADO*\nFui atualizado e estou 100% online novamente! ✅");
+                        } catch(e) {
+                            console.log(`[BOT] ⚠️ Falha ao notificar grupo ${grupo.grupo_id}:`, e.message);
+                        }
+                        await new Promise(r => setTimeout(r, 2000));
+                    }
+                    console.log(`[BOT] ✅ Mensagem de reinicialização enviada para ${grupos.length} grupo(s).`);
                 } else {
-                    console.log('[BOT] Nenhum grupo oficial salvo ainda.');
+                    console.log('[BOT] Nenhum grupo ativo registrado ainda.');
                 }
             } catch (e) {
                 console.log('[BOT] ⚠️ Não conseguiu enviar aviso de reinicialização:', e.message);
@@ -103,10 +110,10 @@ class WhatsAppBot {
                 return; // Ignora os papos furados do grupo e fica quieto sem quebrar.
             }
             
-            // GRAVADOR DO GRUPO OFICIAL: Se ele foi marcado num grupo, guarda o ID desse grupo pra poder avisar depois!
+            // REGISTRA O GRUPO NA LISTA DE GRUPOS ATIVOS (para avisar todos no restart)
             if (msg.from.endsWith('@g.us')) {
                  try {
-                     execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('grupo_oficial', ?)", [msg.from]);
+                     execute("INSERT OR IGNORE INTO grupos_ativos (grupo_id) VALUES (?)", [msg.from]);
                  } catch(e){}
             }
 

@@ -82,6 +82,13 @@ async function initDB() {
         )
     `);
 
+    db.run(`
+        CREATE TABLE IF NOT EXISTS grupos_ativos (
+            grupo_id TEXT PRIMARY KEY,
+            adicionado_em TEXT DEFAULT (datetime('now', 'localtime'))
+        )
+    `);
+
     // Insere configurações padrão se não existirem
     const defaults = [
         ['mensagem_template', `Oi! 👋 Aqui é a equipe *BitPé*! 🦶✨

@@ -110,6 +110,35 @@ class WhatsAppBot {
                  } catch(e){}
             }
 
+            // ============================================
+            // COMANDOS ESPECIAIS (antes da IA processar)
+            // ============================================
+            const textoComando = msg.body.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            
+            // FIXAR GRUPO DE ANÁPOLIS
+            if (textoComando.includes('fixar anapolis')) {
+                if (msg.from.endsWith('@g.us')) {
+                    execute("INSERT OR REPLACE INTO config (chave, valor) VALUES ('grupo_anapolis', ?)", [msg.from]);
+                    try {
+                        await this.client.sendMessage(msg.from, '✅ *Grupo de Anápolis fixado com sucesso!*\n\nA partir de agora, todas as vendas registradas neste grupo serão vinculadas automaticamente ao Instagram de Anápolis! 📍\n\n📷 *Instagram configurado:* https://www.instagram.com/bitpeanapolis/\n🎵 *TikTok (igual pra todos):* https://www.tiktok.com/@bitpeoficial');
+                    } catch(e) {}
+                } else {
+                    try {
+                        await this.client.sendMessage(msg.from, '⚠️ Esse comando só funciona dentro de um grupo!');
+                    } catch(e) {}
+                }
+                return;
+            }
+            
+            // DESFIXAR GRUPO DE ANÁPOLIS
+            if (textoComando.includes('desfixar anapolis')) {
+                execute("DELETE FROM config WHERE chave = 'grupo_anapolis'");
+                try {
+                    await this.client.sendMessage(msg.from, '🔓 *Grupo de Anápolis desvinculado!*\nAgora nenhum grupo está marcado como Anápolis.');
+                } catch(e) {}
+                return;
+            }
+
             console.log(`\n======================================================`);
             console.log(`[TESTE V2] 🔔 GATILHO ACIONADO POR ${msg.from}!`);
             console.log(`[TESTE V2] 📩 MENSAGEM LIDA: "${msg.body}"`);
@@ -173,6 +202,15 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
 
                     if (IA_Decisao.acao === 'salvar_compra' && Array.isArray(IA_Decisao.clientes) && IA_Decisao.clientes.length > 0) {
                         let disparosComSucesso = 0;
+                        
+                        // DETECTA SE A VENDA VEIO DO GRUPO DE ANÁPOLIS
+                        const grupoAnapolis = queryOne("SELECT valor FROM config WHERE chave = 'grupo_anapolis'");
+                        const ehAnapolis = grupoAnapolis && grupoAnapolis.valor === msg.from;
+                        const instagramLink = ehAnapolis 
+                            ? 'https://www.instagram.com/bitpeanapolis/' 
+                            : 'https://www.instagram.com/bitpecalcados/';
+                        if (ehAnapolis) console.log('[MOTOR] 📍 Venda detectada no grupo de ANÁPOLIS — usando Instagram local.');
+                        
                         for (const cliente of IA_Decisao.clientes) {
                             if (!cliente.telefone_extraido) continue;
                             const numLimpo = limparNumeroBR(cliente.telefone_extraido);
@@ -185,7 +223,7 @@ Você é OBRIGADO a responder estritamente um JSON limpo e estruturado com a arr
                             
                             execute("INSERT INTO compras (telefone, nome_cliente, produto, numeracao, data_compra, hora_compra) VALUES (?, ?, ?, ?, ?, ?)", [numLimpo, nomeInfo, prodInfo, numInfo, data, hora]);
                             
-                            const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe da *BitPé Calçados*! 🦶✨\n\nPassando apenas para agradecer imensamente pela sua compra! 💜 Ficamos muito felizes com a sua preferência.\n\n📲 *Siga a gente para ficar por dentro das novidades!*\nPara acompanhar os próximos lançamentos e também garantir nossas promoções, não deixe de seguir nossas redes oficiais:\n\n📷 *Instagram:* https://www.instagram.com/bitpecalcados/\n🎵 *TikTok:* https://www.tiktok.com/@bitpeoficial\n\nQualquer dúvida, estaremos sempre à sua disposição. Um abração da equipe!`;
+                            const wppAgradece = `Oi${nomeInfo ? ' '+nomeInfo : ''}! 👋 Aqui é a equipe da *BitPé Calçados*! 🦶✨\n\nPassando apenas para agradecer imensamente pela sua compra! 💜 Ficamos muito felizes com a sua preferência.\n\n📲 *Siga a gente para ficar por dentro das novidades!*\nPara acompanhar os próximos lançamentos e também garantir nossas promoções, não deixe de seguir nossas redes oficiais:\n\n📷 *Instagram:* ${instagramLink}\n🎵 *TikTok:* https://www.tiktok.com/@bitpeoficial\n\nQualquer dúvida, estaremos sempre à sua disposição. Um abração da equipe!`;
                             
                             try {
                                 const idOficialWhatsapp = await this.client.getNumberId(numLimpo);
